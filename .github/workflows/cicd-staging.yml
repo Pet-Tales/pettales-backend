@@ -1,0 +1,39 @@
+name: CICD
+
+on:
+  push:
+    branches:
+      - staging
+
+jobs:
+  build-and-deploy:
+    runs-on: [ubuntu-latest]
+    steps:
+      - name: Checkout Source
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Yarn
+        run: corepack enable && corepack prepare yarn@stable --activate
+
+      - name: Install Dependencies
+        run: yarn
+
+      - name: Generate Deployment Package
+        run: zip -r nodejs-app-build.zip .
+
+      - name: Deploy to EB
+        uses: einaregilsson/beanstalk-deploy@v21
+        with:
+          aws_access_key: ${{ secrets.AWS_ACCESS_KEY }}
+          aws_secret_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          application_name: "pet-tales-ai-staging"
+          environment_name: "pet-tales-ai-staging-env"
+          version_label: ${{ github.sha }}
+          region: us-east-1
+          use_existing_version_if_available: true
+          deployment_package: nodejs-app-build.zip
