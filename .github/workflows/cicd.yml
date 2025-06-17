@@ -3,7 +3,7 @@ name: CICD
 on:
   push:
     branches:
-      - staging
+      - main
 
 jobs:
   build-and-deploy:
@@ -32,7 +32,7 @@ jobs:
           aws_access_key: ${{ secrets.AWS_ACCESS_KEY }}
           aws_secret_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           application_name: "PetTalesAI"
-          environment_name: "staging-env"
+          environment_name: "prod-env"
           version_label: ${{ github.sha }}
           region: us-east-1
           use_existing_version_if_available: true
