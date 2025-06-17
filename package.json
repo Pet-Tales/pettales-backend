@@ -4,10 +4,8 @@
   "description": "The backend of PetTalesAI",
   "main": "index.js",
   "scripts": {
-    "build": "npm run lint:fix && npx tsc",
-    "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "npx nodemon",
-    "start": "node build/index.js"
+    "start": "node index.js"
   },
   "author": "",
   "license": "ISC",
