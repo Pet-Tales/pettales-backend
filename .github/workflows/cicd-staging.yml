@@ -21,7 +21,7 @@ jobs:
         run: corepack enable && corepack prepare yarn@stable --activate
 
       - name: Install Dependencies
-        run: yarn
+        run: yarn --immutable
 
       - name: Generate Deployment Package
         run: zip -r nodejs-app-build.zip .
