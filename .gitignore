@@ -1,4 +1,14 @@
 node_modules/
 .env
+.env.prod
 *.zip
+
+# Yarn files
+.pnp.*
 .yarn/*
+!.yarn/cache
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/sdks
+!.yarn/versions

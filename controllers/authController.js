@@ -1,0 +1,485 @@
+const { User, Session } = require("../models");
+const { emailService } = require("../services");
+const { tokenUtils } = require("../utils");
+const { validationResult } = require("express-validator");
+const logger = require("../utils/logger");
+const {
+  DEFAULT_CREDITS_BALANCE,
+  COOKIE_OPTIONS,
+  WEB_URL,
+} = require("../utils/constants");
+
+/**
+ * Register a new user with email and password
+ */
+const register = async (req, res) => {
+  try {
+    // Check validation errors
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        message: "Validation failed",
+        errors: errors.array(),
+      });
+    }
+
+    const { email, password } = req.body;
+
+    // Check if user already exists
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res.status(400).json({
+        success: false,
+        message: "User with this email already exists",
+      });
+    }
+
+    // Generate email verification token
+    const emailVerificationToken = tokenUtils.generateEmailVerificationToken();
+    const emailVerificationExpiry =
+      tokenUtils.generateEmailVerificationExpiry();
+
+    // Create new user
+    const user = new User({
+      email,
+      password_hash: password, // Will be hashed by pre-save middleware
+      first_name: "", // Empty by default, will be populated from Google OAuth if available
+      last_name: "", // Empty by default, will be populated from Google OAuth if available
+      email_verification_token: emailVerificationToken,
+      email_verification_expires: emailVerificationExpiry,
+      credits_balance: DEFAULT_CREDITS_BALANCE,
+    });
+
+    await user.save();
+    logger.auth("register", email, true, { userId: user._id });
+
+    // Send verification email
+    try {
+      await emailService.sendEmailVerification(
+        email,
+        "User", // Use "User" as default name for email
+        emailVerificationToken
+      );
+      logger.email("verification_sent", email, true);
+    } catch (emailError) {
+      logger.email("verification_sent", email, false, {
+        error: emailError.message,
+      });
+      // Don't fail registration if email fails
+    }
+
+    res.status(201).json({
+      success: true,
+      message:
+        "User registered successfully. Please check your email for verification.",
+      data: {
+        user: {
+          id: user._id,
+          email: user.email,
+          firstName: user.first_name || "",
+          lastName: user.last_name || "",
+          emailVerified: user.email_verified,
+        },
+      },
+    });
+  } catch (error) {
+    logger.error(`Registration error: ${error}`);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
+  }
+};
+
+/**
+ * Login user with email and password
+ */
+const login = async (req, res) => {
+  try {
+    // Check validation errors
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        message: "Validation failed",
+        errors: errors.array(),
+      });
+    }
+
+    const { email, password } = req.body;
+
+    // Find user by email
+    const user = await User.findOne({ email, status: "active" });
+
+    if (!user) {
+      logger.info("Login attempt - No user found for email:", email);
+      return res.status(401).json({
+        success: false,
+        message: "Invalid email or password",
+      });
+    }
+
+    // Check password
+    const isPasswordValid = await user.comparePassword(password);
+    if (!isPasswordValid) {
+      logger.info("Login attempt - Invalid password for user:", email);
+      return res.status(401).json({
+        success: false,
+        message: "Invalid email or password",
+      });
+    }
+
+    // Check if email is verified
+    if (!user.email_verified) {
+      logger.info("Login attempt - Email not verified for user:", email);
+      return res.status(403).json({
+        success: false,
+        message: "Please verify your email before logging in",
+        code: "EMAIL_NOT_VERIFIED",
+      });
+    }
+
+    logger.info("Login attempt - All checks passed for user:", email);
+
+    // Create session
+    const sessionToken = tokenUtils.generateSessionToken();
+    const sessionExpiry = tokenUtils.generateSessionExpiry();
+
+    const session = new Session({
+      user_id: user._id,
+      session_token: sessionToken,
+      expires_at: sessionExpiry,
+      user_agent: req.get("User-Agent"),
+      ip_address: req.ip,
+    });
+
+    await session.save();
+
+    // Set session cookie
+    const cookieOptions = {
+      ...COOKIE_OPTIONS,
+      expires: sessionExpiry,
+    };
+
+    logger.info("Setting session cookie with options:", cookieOptions);
+    res.cookie("session_token", sessionToken, cookieOptions);
+
+    res.json({
+      success: true,
+      message: "Login successful",
+      data: {
+        user: {
+          id: user._id,
+          email: user.email,
+          firstName: user.first_name,
+          lastName: user.last_name,
+          profileImageUrl: user.profile_image_url,
+          emailVerified: user.email_verified,
+          creditsBalance: user.credits_balance,
+        },
+      },
+    });
+  } catch (error) {
+    logger.error(`Login error: ${error}`);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
+  }
+};
+
+/**
+ * Logout user
+ */
+const logout = async (req, res) => {
+  try {
+    const sessionToken = req.cookies.session_token;
+
+    if (sessionToken) {
+      // Delete session from database
+      await Session.deleteOne({ session_token: sessionToken });
+    }
+
+    // Clear session cookie
+    res.clearCookie("session_token");
+
+    res.json({
+      success: true,
+      message: "Logout successful",
+    });
+  } catch (error) {
+    logger.error(`Logout error: ${error}`);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
+  }
+};
+
+/**
+ * Verify email address
+ */
+const verifyEmail = async (req, res) => {
+  try {
+    const { token } = req.query;
+
+    if (!token) {
+      return res.status(400).json({
+        success: false,
+        message: "Verification token is required",
+      });
+    }
+
+    // First check if user with this token exists (regardless of expiry)
+    let user = await User.findOne({
+      email_verification_token: token,
+      status: "active",
+    });
+
+    // If no user found with this token, check if it's already been used
+    if (!user) {
+      // Check if there's a user who had this token but is now verified
+      const verifiedUser = await User.findOne({
+        email_verification_token: null,
+        email_verified: true,
+        status: "active",
+      });
+
+      if (verifiedUser) {
+        return res.status(400).json({
+          success: false,
+          message: "This verification link has already been used",
+        });
+      }
+
+      return res.status(400).json({
+        success: false,
+        message: "Invalid verification token",
+      });
+    }
+
+    // Check if user is already verified
+    if (user.email_verified) {
+      return res.status(400).json({
+        success: false,
+        message: "Email is already verified",
+      });
+    }
+
+    // Check if token is expired
+    if (
+      user.email_verification_expires &&
+      user.email_verification_expires < new Date()
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Verification token has expired",
+      });
+    }
+
+    // Update user as verified
+    user.email_verified = true;
+    user.email_verification_token = null;
+    user.email_verification_expires = null;
+    await user.save();
+
+    // Create session to automatically log in the user
+    const sessionToken = tokenUtils.generateSessionToken();
+    const sessionExpiry = tokenUtils.generateSessionExpiry();
+
+    const session = new Session({
+      user_id: user._id,
+      session_token: sessionToken,
+      expires_at: sessionExpiry,
+      user_agent: req.get("User-Agent"),
+      ip_address: req.ip,
+    });
+
+    await session.save();
+
+    // Set session cookie
+    const cookieOptions = {
+      ...COOKIE_OPTIONS,
+      expires: sessionExpiry,
+    };
+
+    logger.info("Setting session cookie with options:", cookieOptions);
+    res.cookie("session_token", sessionToken, cookieOptions);
+
+    // Send welcome email
+    try {
+      await emailService.sendWelcomeEmail(
+        user.email,
+        user.first_name || "User"
+      );
+    } catch (emailError) {
+      logger.error(`Failed to send welcome email: ${emailError}`);
+      // Don't fail verification if welcome email fails
+    }
+
+    res.json({
+      success: true,
+      message: "Email verified successfully",
+      data: {
+        user: {
+          id: user._id,
+          email: user.email,
+          firstName: user.first_name || "",
+          lastName: user.last_name || "",
+          profileImageUrl: user.profile_image_url,
+          emailVerified: user.email_verified,
+          creditsBalance: user.credits_balance,
+        },
+      },
+    });
+  } catch (error) {
+    logger.error(`Email verification error: ${error}`);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
+  }
+};
+
+/**
+ * Resend email verification
+ */
+const resendEmailVerification = async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        message: "Email is required",
+      });
+    }
+
+    // Find user
+    const user = await User.findOne({ email, status: "active" });
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    if (user.email_verified) {
+      return res.status(400).json({
+        success: false,
+        message: "Email is already verified",
+      });
+    }
+
+    // Generate new verification token
+    const emailVerificationToken = tokenUtils.generateEmailVerificationToken();
+    const emailVerificationExpiry =
+      tokenUtils.generateEmailVerificationExpiry();
+
+    user.email_verification_token = emailVerificationToken;
+    user.email_verification_expires = emailVerificationExpiry;
+    await user.save();
+
+    // Send verification email
+    await emailService.sendEmailVerification(
+      email,
+      user.first_name,
+      emailVerificationToken
+    );
+
+    res.json({
+      success: true,
+      message: "Verification email sent successfully",
+    });
+  } catch (error) {
+    logger.error(`Resend verification error: ${error}`);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
+  }
+};
+
+/**
+ * Get current user information
+ */
+const getCurrentUser = async (req, res) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({
+        success: false,
+        message: "Not authenticated",
+      });
+    }
+
+    res.json({
+      success: true,
+      data: {
+        user: {
+          id: req.user._id,
+          email: req.user.email,
+          firstName: req.user.first_name,
+          lastName: req.user.last_name,
+          profileImageUrl: req.user.profile_image_url,
+          emailVerified: req.user.email_verified,
+          creditsBalance: req.user.credits_balance,
+        },
+      },
+    });
+  } catch (error) {
+    logger.error(`Get current user error: ${error}`);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
+  }
+};
+
+/**
+ * Handle Google OAuth callback
+ */
+const googleCallback = async (req, res) => {
+  try {
+    const user = req.user; // Set by passport
+
+    // Create session
+    const sessionToken = tokenUtils.generateSessionToken();
+    const sessionExpiry = tokenUtils.generateSessionExpiry();
+
+    const session = new Session({
+      user_id: user._id,
+      session_token: sessionToken,
+      expires_at: sessionExpiry,
+      user_agent: req.get("User-Agent"),
+      ip_address: req.ip,
+    });
+
+    await session.save();
+
+    // Set session cookie
+    const cookieOptions = {
+      ...COOKIE_OPTIONS,
+      expires: sessionExpiry,
+    };
+
+    logger.info("Setting session cookie with options:", cookieOptions);
+    res.cookie("session_token", sessionToken, cookieOptions);
+
+    // Redirect to frontend
+    res.redirect(`${WEB_URL}/dashboard`);
+  } catch (error) {
+    logger.error(`Google callback error: ${error}`);
+    res.redirect(`${WEB_URL}/login?error=auth_failed`);
+  }
+};
+
+module.exports = {
+  register,
+  login,
+  logout,
+  verifyEmail,
+  resendEmailVerification,
+  getCurrentUser,
+  googleCallback,
+};
