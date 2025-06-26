@@ -31,6 +31,7 @@ const AWS_ACCESS_KEY_ID = process.env.AWS_ACCESS_KEY_ID;
 const AWS_SECRET_ACCESS_KEY = process.env.AWS_SECRET_ACCESS_KEY;
 
 // Email Configuration
+const NO_REPLY_EMAIL_ADDRESS = process.env.NO_REPLY_EMAIL_ADDRESS;
 const FROM_EMAIL = process.env.FROM_EMAIL;
 const FROM_NAME = process.env.FROM_NAME || "PetTalesAI";
 
@@ -126,6 +127,7 @@ module.exports = {
   AWS_SECRET_ACCESS_KEY,
 
   // Email
+  NO_REPLY_EMAIL_ADDRESS,
   FROM_EMAIL,
   FROM_NAME,
 

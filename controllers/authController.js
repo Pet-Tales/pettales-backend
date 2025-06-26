@@ -8,6 +8,11 @@ const {
   COOKIE_OPTIONS,
   WEB_URL,
 } = require("../utils/constants");
+const {
+  sendErrorResponse,
+  sendValidationErrorResponse,
+  sendDatabaseErrorResponse,
+} = require("../utils/errorCodes");
 
 /**
  * Register a new user with email and password
@@ -17,14 +22,10 @@ const register = async (req, res) => {
     // Check validation errors
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      return res.status(400).json({
-        success: false,
-        message: "Validation failed",
-        errors: errors.array(),
-      });
+      return sendValidationErrorResponse(res, errors);
     }
 
-    const { email, password } = req.body;
+    const { email, password, preferred_language } = req.body;
 
     // Check if user already exists
     const existingUser = await User.findOne({ email });
@@ -49,6 +50,7 @@ const register = async (req, res) => {
       email_verification_token: emailVerificationToken,
       email_verification_expires: emailVerificationExpiry,
       credits_balance: DEFAULT_CREDITS_BALANCE,
+      preferred_language: preferred_language || "en", // Use provided language or default to "en"
     });
 
     await user.save();
@@ -59,7 +61,8 @@ const register = async (req, res) => {
       await emailService.sendEmailVerification(
         email,
         "User", // Use "User" as default name for email
-        emailVerificationToken
+        emailVerificationToken,
+        user.preferred_language || "en"
       );
       logger.email("verification_sent", email, true);
     } catch (emailError) {
@@ -114,30 +117,20 @@ const login = async (req, res) => {
 
     if (!user) {
       logger.info("Login attempt - No user found for email:", email);
-      return res.status(401).json({
-        success: false,
-        message: "Invalid email or password",
-      });
+      return sendErrorResponse(res, "AUTH_002");
     }
 
     // Check password
     const isPasswordValid = await user.comparePassword(password);
     if (!isPasswordValid) {
       logger.info("Login attempt - Invalid password for user:", email);
-      return res.status(401).json({
-        success: false,
-        message: "Invalid email or password",
-      });
+      return sendErrorResponse(res, "AUTH_001");
     }
 
     // Check if email is verified
     if (!user.email_verified) {
       logger.info("Login attempt - Email not verified for user:", email);
-      return res.status(403).json({
-        success: false,
-        message: "Please verify your email before logging in",
-        code: "EMAIL_NOT_VERIFIED",
-      });
+      return sendErrorResponse(res, "AUTH_003");
     }
 
     logger.info("Login attempt - All checks passed for user:", email);
@@ -177,6 +170,7 @@ const login = async (req, res) => {
           profileImageUrl: user.profile_image_url,
           emailVerified: user.email_verified,
           creditsBalance: user.credits_balance,
+          preferredLanguage: user.preferred_language,
         },
       },
     });
@@ -311,7 +305,8 @@ const verifyEmail = async (req, res) => {
     try {
       await emailService.sendWelcomeEmail(
         user.email,
-        user.first_name || "User"
+        user.first_name || "User",
+        user.preferred_language || "en"
       );
     } catch (emailError) {
       logger.error(`Failed to send welcome email: ${emailError}`);
@@ -330,6 +325,7 @@ const verifyEmail = async (req, res) => {
           profileImageUrl: user.profile_image_url,
           emailVerified: user.email_verified,
           creditsBalance: user.credits_balance,
+          preferredLanguage: user.preferred_language,
         },
       },
     });
@@ -385,7 +381,8 @@ const resendEmailVerification = async (req, res) => {
     await emailService.sendEmailVerification(
       email,
       user.first_name,
-      emailVerificationToken
+      emailVerificationToken,
+      user.preferred_language || "en"
     );
 
     res.json({
@@ -424,6 +421,7 @@ const getCurrentUser = async (req, res) => {
           profileImageUrl: req.user.profile_image_url,
           emailVerified: req.user.email_verified,
           creditsBalance: req.user.credits_balance,
+          preferredLanguage: req.user.preferred_language,
         },
       },
     });

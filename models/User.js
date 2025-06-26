@@ -62,6 +62,11 @@ const userSchema = new mongoose.Schema(
       default: 0,
       min: 0,
     },
+    preferred_language: {
+      type: String,
+      enum: ["en", "es"],
+      default: "en",
+    },
     notification_preferences: {
       email_verification: {
         type: Boolean,

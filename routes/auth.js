@@ -20,6 +20,10 @@ const registerValidation = [
   body("password")
     .isLength({ min: 6 })
     .withMessage("Password must be at least 6 characters long"),
+  body("preferred_language")
+    .optional()
+    .isIn(["en", "es"])
+    .withMessage("Language must be either 'en' or 'es'"),
 ];
 
 const loginValidation = [

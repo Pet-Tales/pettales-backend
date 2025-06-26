@@ -1,10 +1,11 @@
 const { SESClient, SendEmailCommand } = require("@aws-sdk/client-ses");
 const logger = require("../utils/logger");
+const { getEmailTemplate } = require("../email-templates");
 const {
   AWS_ACCESS_KEY_ID,
   AWS_SECRET_ACCESS_KEY,
   AWS_REGION,
-  FROM_EMAIL,
+  NO_REPLY_EMAIL_ADDRESS,
   WEB_URL,
 } = require("../utils/constants");
 
@@ -51,7 +52,7 @@ const sendEmail = async (to, subject, textBody, htmlBody = null) => {
   }
 
   const params = {
-    Source: FROM_EMAIL,
+    Source: NO_REPLY_EMAIL_ADDRESS,
     Destination: {
       ToAddresses: [to],
     },
@@ -97,29 +98,27 @@ const sendEmail = async (to, subject, textBody, htmlBody = null) => {
  * @param {string} email - User email
  * @param {string} firstName - User first name
  * @param {string} verificationToken - Verification token
+ * @param {string} language - User's preferred language (default: 'en')
  */
-const sendEmailVerification = async (email, firstName, verificationToken) => {
+const sendEmailVerification = async (
+  email,
+  firstName,
+  verificationToken,
+  language = "en"
+) => {
   const verificationUrl = `${WEB_URL}/verify-email?token=${verificationToken}`;
 
-  const subject = "Verify your PetTalesAI account";
+  const template = getEmailTemplate(language, "emailVerification", {
+    firstName,
+    verificationUrl,
+  });
 
-  const textBody = `
-Hello ${firstName},
-
-Welcome to PetTalesAI! Please verify your email address to complete your account setup.
-
-Click the link below to verify your email:
-${verificationUrl}
-
-This link will expire in 24 hours.
-
-If you didn't create an account with PetTalesAI, please ignore this email.
-
-Best regards,
-The PetTalesAI Team
-  `.trim();
-
-  return sendEmail(email, subject, textBody);
+  return sendEmail(
+    email,
+    template.subject,
+    template.textBody,
+    template.htmlBody
+  );
 };
 
 /**
@@ -127,58 +126,49 @@ The PetTalesAI Team
  * @param {string} email - User email
  * @param {string} firstName - User first name
  * @param {string} resetToken - Password reset token
+ * @param {string} language - User's preferred language (default: 'en')
  */
-const sendPasswordReset = async (email, firstName, resetToken) => {
+const sendPasswordReset = async (
+  email,
+  firstName,
+  resetToken,
+  language = "en"
+) => {
   const resetUrl = `${WEB_URL}/reset-password?token=${resetToken}`;
 
-  const subject = "Reset your PetTalesAI password";
+  const template = getEmailTemplate(language, "passwordReset", {
+    firstName,
+    resetUrl,
+  });
 
-  const textBody = `
-Hello ${firstName},
-
-You requested to reset your password for your PetTalesAI account.
-
-Click the link below to reset your password:
-${resetUrl}
-
-This link will expire in 1 hour.
-
-If you didn't request a password reset, please ignore this email.
-
-Best regards,
-The PetTalesAI Team
-  `.trim();
-
-  return sendEmail(email, subject, textBody);
+  return sendEmail(
+    email,
+    template.subject,
+    template.textBody,
+    template.htmlBody
+  );
 };
 
 /**
  * Send welcome email
  * @param {string} email - User email
  * @param {string} firstName - User first name
+ * @param {string} language - User's preferred language (default: 'en')
  */
-const sendWelcomeEmail = async (email, firstName) => {
-  const subject = "Welcome to PetTalesAI!";
+const sendWelcomeEmail = async (email, firstName, language = "en") => {
+  const dashboardUrl = `${WEB_URL}/dashboard`;
 
-  const textBody = `
-Hello ${firstName},
+  const template = getEmailTemplate(language, "welcome", {
+    firstName,
+    dashboardUrl,
+  });
 
-Welcome to PetTalesAI! We're excited to have you join our community of storytellers.
-
-With PetTalesAI, you can create magical, personalized children's books featuring your beloved pets as the main characters. Our AI-powered platform makes it easy to bring your pet's adventures to life.
-
-Here's what you can do next:
-- Create your first character
-- Generate your first story
-- Explore our gallery for inspiration
-
-If you have any questions, feel free to reach out to our support team.
-
-Happy storytelling!
-The PetTalesAI Team
-  `.trim();
-
-  return sendEmail(email, subject, textBody);
+  return sendEmail(
+    email,
+    template.subject,
+    template.textBody,
+    template.htmlBody
+  );
 };
 
 module.exports = {

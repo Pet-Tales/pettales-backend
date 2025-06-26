@@ -1,5 +1,6 @@
 const { Session } = require("../models");
 const logger = require("../utils/logger");
+const { sendErrorResponse } = require("../utils/errorCodes");
 
 /**
  * Middleware to authenticate user based on session token
@@ -58,10 +59,7 @@ const requireAuth = async (req, res, next) => {
     const sessionToken = req.cookies.session_token;
 
     if (!sessionToken) {
-      return res.status(401).json({
-        success: false,
-        message: "Authentication required",
-      });
+      return sendErrorResponse(res, "AUTH_006");
     }
 
     // Find valid session
@@ -71,18 +69,12 @@ const requireAuth = async (req, res, next) => {
     }).populate("user_id");
 
     if (!session || !session.user_id) {
-      return res.status(401).json({
-        success: false,
-        message: "Invalid or expired session",
-      });
+      return sendErrorResponse(res, "AUTH_007");
     }
 
     // Check if user is active
     if (session.user_id.status !== "active") {
-      return res.status(401).json({
-        success: false,
-        message: "Account is not active",
-      });
+      return sendErrorResponse(res, "AUTH_008");
     }
 
     req.user = session.user_id;

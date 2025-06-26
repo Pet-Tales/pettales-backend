@@ -63,7 +63,8 @@ if (GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET) {
           try {
             await emailService.sendWelcomeEmail(
               newUser.email,
-              newUser.first_name
+              newUser.first_name,
+              newUser.preferred_language || "en"
             );
           } catch (emailError) {
             logger.email("welcome", newUser.email, false, {
