@@ -34,6 +34,20 @@ const loginValidation = [
   body("password").notEmpty().withMessage("Password is required"),
 ];
 
+const forgotPasswordValidation = [
+  body("email")
+    .isEmail()
+    .normalizeEmail()
+    .withMessage("Please provide a valid email address"),
+];
+
+const resetPasswordValidation = [
+  body("token").notEmpty().withMessage("Reset token is required"),
+  body("password")
+    .isLength({ min: 6 })
+    .withMessage("Password must be at least 6 characters long"),
+];
+
 // Register route
 router.post(
   "/register",
@@ -53,6 +67,21 @@ router.get("/verify-email", authController.verifyEmail);
 
 // Resend email verification
 router.post("/resend-verification", authController.resendEmailVerification);
+
+// Forgot password route
+router.post(
+  "/forgot-password",
+  requireGuest,
+  forgotPasswordValidation,
+  authController.requestPasswordReset
+);
+
+// Reset password route (allow both authenticated and guest users)
+router.post(
+  "/reset-password",
+  resetPasswordValidation,
+  authController.resetPassword
+);
 
 // Get current user
 router.get("/me", authenticateUser, authController.getCurrentUser);

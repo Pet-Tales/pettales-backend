@@ -7,6 +7,7 @@ const {
   GOOGLE_CLIENT_ID,
   GOOGLE_CLIENT_SECRET,
   DEFAULT_CREDITS_BALANCE,
+  API_BASE_URL,
 } = require("../utils/constants");
 
 // Only configure Google OAuth if credentials are provided
@@ -17,7 +18,7 @@ if (GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET) {
       {
         clientID: GOOGLE_CLIENT_ID,
         clientSecret: GOOGLE_CLIENT_SECRET,
-        callbackURL: "/auth/google/callback",
+        callbackURL: `${API_BASE_URL}/api/auth/google/callback`,
       },
       async (accessToken, refreshToken, profile, done) => {
         try {

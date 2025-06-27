@@ -1,5 +1,4 @@
 require("dotenv").config();
-const logger = require("../utils/logger");
 
 /**
  * Centralized environment variables and constants
@@ -29,6 +28,8 @@ const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
 const AWS_REGION = process.env.AWS_REGION;
 const AWS_ACCESS_KEY_ID = process.env.AWS_ACCESS_KEY_ID;
 const AWS_SECRET_ACCESS_KEY = process.env.AWS_SECRET_ACCESS_KEY;
+const S3_BUCKET_NAME = process.env.S3_BUCKET_NAME;
+const CLOUDFRONT_URL = process.env.CLOUDFRONT_URL;
 
 // Email Configuration
 const NO_REPLY_EMAIL_ADDRESS = process.env.NO_REPLY_EMAIL_ADDRESS;
@@ -53,7 +54,7 @@ const COOKIE_OPTIONS = {
   sameSite: "lax",
   path: "/",
   maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-  domain: undefined, // Let browser handle domain
+  domain: DEBUG_MODE ? "127.0.0.1" : undefined, // Share cookies across ports in development
 };
 
 // Validation
@@ -125,6 +126,8 @@ module.exports = {
   AWS_REGION,
   AWS_ACCESS_KEY_ID,
   AWS_SECRET_ACCESS_KEY,
+  S3_BUCKET_NAME,
+  CLOUDFRONT_URL,
 
   // Email
   NO_REPLY_EMAIL_ADDRESS,

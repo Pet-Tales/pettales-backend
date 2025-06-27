@@ -30,10 +30,12 @@ const register = async (req, res) => {
     // Check if user already exists
     const existingUser = await User.findOne({ email });
     if (existingUser) {
-      return res.status(400).json({
-        success: false,
-        message: "User with this email already exists",
-      });
+      // If user exists but email is not verified, return specific error code
+      if (!existingUser.email_verified) {
+        return sendErrorResponse(res, "REG_005");
+      }
+      // If user exists and is verified, return generic error
+      return sendErrorResponse(res, "REG_001");
     }
 
     // Generate email verification token
@@ -171,6 +173,7 @@ const login = async (req, res) => {
           emailVerified: user.email_verified,
           creditsBalance: user.credits_balance,
           preferredLanguage: user.preferred_language,
+          hasPassword: !!user.password_hash, // Indicate if user has a password
         },
       },
     });
@@ -422,6 +425,7 @@ const getCurrentUser = async (req, res) => {
           emailVerified: req.user.email_verified,
           creditsBalance: req.user.credits_balance,
           preferredLanguage: req.user.preferred_language,
+          hasPassword: !!req.user.password_hash, // Indicate if user has a password
         },
       },
     });
@@ -472,6 +476,154 @@ const googleCallback = async (req, res) => {
   }
 };
 
+/**
+ * Request password reset
+ */
+const requestPasswordReset = async (req, res) => {
+  try {
+    // Check validation errors
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        message: "Validation failed",
+        errors: errors.array(),
+      });
+    }
+
+    const { email } = req.body;
+
+    // Find user by email
+    const user = await User.findOne({ email, status: "active" });
+
+    // Always return success to prevent email enumeration
+    // But only send email if user exists
+    if (user) {
+      // Check rate limiting - max 3 requests per hour
+      const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+      const recentResetRequests = await User.countDocuments({
+        email,
+        password_reset_expires: { $gt: oneHourAgo },
+      });
+
+      if (recentResetRequests >= 3) {
+        logger.warn(`Password reset rate limit exceeded for email: ${email}`);
+        return sendErrorResponse(res, "AUTH_011");
+      }
+
+      // Generate password reset token
+      const resetToken = tokenUtils.generatePasswordResetToken();
+      const resetExpiry = tokenUtils.generatePasswordResetExpiry();
+
+      // Update user with reset token
+      user.password_reset_token = resetToken;
+      user.password_reset_expires = resetExpiry;
+      await user.save();
+
+      logger.info(`Password reset requested for user: ${email}`);
+
+      // Send password reset email
+      try {
+        await emailService.sendPasswordReset(
+          email,
+          user.first_name || "User",
+          resetToken,
+          user.preferred_language || "en"
+        );
+        logger.email("password_reset_sent", email, true);
+      } catch (emailError) {
+        logger.email("password_reset_sent", email, false, {
+          error: emailError.message,
+        });
+        // Don't fail the request if email fails
+      }
+    } else {
+      logger.info(`Password reset requested for non-existent email: ${email}`);
+    }
+
+    res.json({
+      success: true,
+      message:
+        "If an account with that email exists, a password reset link has been sent.",
+    });
+  } catch (error) {
+    logger.error(`Request password reset error: ${error}`);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
+  }
+};
+
+/**
+ * Reset password using token
+ */
+const resetPassword = async (req, res) => {
+  try {
+    // Check validation errors
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        message: "Validation failed",
+        errors: errors.array(),
+      });
+    }
+
+    const { token, password } = req.body;
+
+    // Find user with valid reset token
+    const user = await User.findOne({
+      password_reset_token: token,
+      password_reset_expires: { $gt: new Date() },
+      status: "active",
+    });
+
+    if (!user) {
+      logger.warn(`Invalid or expired password reset token: ${token}`);
+      return sendErrorResponse(res, "AUTH_010");
+    }
+
+    // Update password and clear reset token
+    user.password_hash = password; // Will be hashed by pre-save middleware
+    user.password_reset_token = null;
+    user.password_reset_expires = null;
+    await user.save();
+
+    logger.info(`Password reset successful for user: ${user.email}`);
+
+    // Invalidate all existing sessions for this user
+    await Session.deleteMany({ user_id: user._id });
+    logger.info(`All sessions invalidated for user: ${user.email}`);
+
+    // Send confirmation email
+    try {
+      await emailService.sendPasswordChangeConfirmation(
+        user.email,
+        user.first_name || "User",
+        user.preferred_language || "en"
+      );
+    } catch (emailError) {
+      logger.error(
+        `Failed to send password change confirmation: ${emailError}`
+      );
+      // Don't fail the request if email fails
+    }
+
+    res.json({
+      success: true,
+      message:
+        "Password has been reset successfully. Please log in with your new password.",
+    });
+  } catch (error) {
+    logger.error(`Reset password error: ${error}`);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
+  }
+};
+
 module.exports = {
   register,
   login,
@@ -480,4 +632,6 @@ module.exports = {
   resendEmailVerification,
   getCurrentUser,
   googleCallback,
+  requestPasswordReset,
+  resetPassword,
 };

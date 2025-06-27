@@ -49,6 +49,20 @@ const userSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+    new_email: {
+      type: String,
+      default: null,
+      lowercase: true,
+      trim: true,
+    },
+    email_change_token: {
+      type: String,
+      default: null,
+    },
+    email_change_expires: {
+      type: Date,
+      default: null,
+    },
     password_reset_token: {
       type: String,
       default: null,

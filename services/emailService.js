@@ -171,9 +171,63 @@ const sendWelcomeEmail = async (email, firstName, language = "en") => {
   );
 };
 
+/**
+ * Send password change confirmation email
+ * @param {string} email - User email
+ * @param {string} firstName - User first name
+ * @param {string} language - User's preferred language (default: 'en')
+ */
+const sendPasswordChangeConfirmation = async (
+  email,
+  firstName,
+  language = "en"
+) => {
+  const template = getEmailTemplate(language, "passwordChangeConfirmation", {
+    firstName,
+  });
+
+  return sendEmail(
+    email,
+    template.subject,
+    template.textBody,
+    template.htmlBody
+  );
+};
+
+/**
+ * Send email change verification email
+ * @param {string} newEmail - New email address to verify
+ * @param {string} firstName - User first name
+ * @param {string} verificationToken - Email change verification token
+ * @param {string} language - User's preferred language (default: 'en')
+ */
+const sendEmailChangeVerification = async (
+  newEmail,
+  firstName,
+  verificationToken,
+  language = "en"
+) => {
+  const verificationUrl = `${WEB_URL}/verify-email-change?token=${verificationToken}`;
+
+  const template = getEmailTemplate(language, "emailChangeVerification", {
+    firstName,
+    newEmail,
+    verificationUrl,
+  });
+
+  return sendEmail(
+    newEmail,
+    template.subject,
+    template.textBody,
+    template.htmlBody
+  );
+};
+
 module.exports = {
   sendEmail,
   sendEmailVerification,
   sendPasswordReset,
   sendWelcomeEmail,
+  sendPasswordChangeConfirmation,
+  sendEmailChangeVerification,
 };
