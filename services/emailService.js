@@ -5,6 +5,7 @@ const {
   AWS_ACCESS_KEY_ID,
   AWS_SECRET_ACCESS_KEY,
   AWS_REGION,
+  FROM_NAME,
   NO_REPLY_EMAIL_ADDRESS,
   WEB_URL,
 } = require("../utils/constants");
@@ -52,7 +53,7 @@ const sendEmail = async (to, subject, textBody, htmlBody = null) => {
   }
 
   const params = {
-    Source: NO_REPLY_EMAIL_ADDRESS,
+    Source: `"${FROM_NAME}" <${NO_REPLY_EMAIL_ADDRESS}>`,
     Destination: {
       ToAddresses: [to],
     },
@@ -223,6 +224,69 @@ const sendEmailChangeVerification = async (
   );
 };
 
+/**
+ * Send book generation success email
+ * @param {string} email - User email
+ * @param {string} firstName - User first name
+ * @param {string} bookTitle - Title of the generated book
+ * @param {string} pdfUrl - URL to download the PDF
+ * @param {string} language - User's preferred language (default: 'en')
+ */
+const sendBookGenerationSuccess = async (
+  email,
+  firstName,
+  bookTitle,
+  pdfUrl,
+  language = "en"
+) => {
+  const dashboardUrl = `${WEB_URL}/dashboard`;
+
+  const template = getEmailTemplate(language, "bookGenerationSuccess", {
+    firstName,
+    bookTitle,
+    pdfUrl,
+    dashboardUrl,
+  });
+
+  return sendEmail(
+    email,
+    template.subject,
+    template.textBody,
+    template.htmlBody
+  );
+};
+
+/**
+ * Send book generation failure email
+ * @param {string} email - User email
+ * @param {string} firstName - User first name
+ * @param {string} bookTitle - Title of the book that failed to generate
+ * @param {string} language - User's preferred language (default: 'en')
+ */
+const sendBookGenerationFailure = async (
+  email,
+  firstName,
+  bookTitle,
+  language = "en"
+) => {
+  const dashboardUrl = `${WEB_URL}/dashboard`;
+  const supportEmail = NO_REPLY_EMAIL_ADDRESS; // Use the same email for support contact
+
+  const template = getEmailTemplate(language, "bookGenerationFailure", {
+    firstName,
+    bookTitle,
+    dashboardUrl,
+    supportEmail,
+  });
+
+  return sendEmail(
+    email,
+    template.subject,
+    template.textBody,
+    template.htmlBody
+  );
+};
+
 module.exports = {
   sendEmail,
   sendEmailVerification,
@@ -230,4 +294,6 @@ module.exports = {
   sendWelcomeEmail,
   sendPasswordChangeConfirmation,
   sendEmailChangeVerification,
+  sendBookGenerationSuccess,
+  sendBookGenerationFailure,
 };

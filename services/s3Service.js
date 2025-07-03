@@ -2,7 +2,6 @@ const {
   S3Client,
   PutObjectCommand,
   DeleteObjectCommand,
-  GetObjectCommand,
 } = require("@aws-sdk/client-s3");
 const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 const logger = require("../utils/logger");
@@ -177,7 +176,7 @@ const generateAvatarS3Key = (userId, fileExtension) => {
  */
 const generateCharacterImageFileName = (characterId, fileExtension) => {
   const timestamp = Date.now();
-  return `${characterId}_${timestamp}.${fileExtension}`;
+  return `character_${characterId}_${timestamp}.${fileExtension}`;
 };
 
 /**

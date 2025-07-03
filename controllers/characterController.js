@@ -313,13 +313,10 @@ const generateImageUploadUrl = async (req, res) => {
     );
     logger.info(`Full character data:`, JSON.stringify(character, null, 2));
 
-    // Verify character is a pet (only pets can have reference images)
-    if (character.characterType !== "pet") {
-      return res.status(400).json({
-        success: false,
-        message: "Reference images are only allowed for pet characters",
-      });
-    }
+    // Reference images are now allowed for both human and pet characters
+    logger.info(
+      `Generating image upload URL for ${character.characterType} character: ${id}`
+    );
 
     // Validate content type (reuse avatar validation)
     if (!contentType || !s3Service.isValidAvatarFileType(contentType)) {
@@ -393,13 +390,10 @@ const updateCharacterImage = async (req, res) => {
       });
     }
 
-    // Verify character is a pet
-    if (character.characterType !== "pet") {
-      return res.status(400).json({
-        success: false,
-        message: "Reference images are only allowed for pet characters",
-      });
-    }
+    // Reference images are now allowed for both human and pet characters
+    logger.info(
+      `Updating reference image for ${character.characterType} character: ${id}`
+    );
 
     // Delete old image if it exists (field is transformed to camelCase by toJSON)
     if (character.referenceImageUrl) {

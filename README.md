@@ -4,7 +4,7 @@ The backend API for PetTalesAI - an AI-powered children's book generator platfor
 
 ## 🚀 Features
 
-- **User Authentication**: JWT-based authentication with session management
+- **User Authentication**: Session-based authentication with database storage
 - **Google OAuth**: Social login integration
 - **Email Services**: AWS SES integration for transactional emails
 - **Internationalization**: Multi-language email templates (English/Spanish)

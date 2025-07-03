@@ -3,6 +3,8 @@ const welcome = require("./welcome");
 const passwordReset = require("./passwordReset");
 const passwordChangeConfirmation = require("./passwordChangeConfirmation");
 const emailChangeVerification = require("./emailChangeVerification");
+const bookGenerationSuccess = require("./bookGenerationSuccess");
+const bookGenerationFailure = require("./bookGenerationFailure");
 
 module.exports = {
   emailVerification,
@@ -10,4 +12,6 @@ module.exports = {
   passwordReset,
   passwordChangeConfirmation,
   emailChangeVerification,
+  bookGenerationSuccess,
+  bookGenerationFailure,
 };

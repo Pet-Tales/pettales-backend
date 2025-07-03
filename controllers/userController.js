@@ -98,7 +98,6 @@ const getProfile = async (req, res) => {
           emailVerified: req.user.email_verified,
           creditsBalance: req.user.credits_balance,
           preferredLanguage: req.user.preferred_language,
-          notificationPreferences: req.user.notification_preferences,
           createdAt: req.user.created_at,
           hasPassword: !!req.user.password_hash, // Indicate if user has a password
         },

@@ -1,5 +1,5 @@
 const mongoose = require("mongoose");
-const { Character, User } = require("../models");
+const { Character } = require("../models");
 const s3Service = require("./s3Service");
 const logger = require("../utils/logger");
 
@@ -94,8 +94,18 @@ const createCharacter = async (userId, characterData) => {
   try {
     // Validate required fields based on character type
     if (characterData.character_type === "human") {
-      if (!characterData.age || !characterData.gender) {
-        throw new Error("Age and gender are required for human characters");
+      if (
+        !characterData.age ||
+        !characterData.gender ||
+        !characterData.ethnicity
+      ) {
+        throw new Error(
+          "Age, gender, and ethnicity are required for human characters"
+        );
+      }
+    } else if (characterData.character_type === "pet") {
+      if (!characterData.pet_type || !characterData.breed) {
+        throw new Error("Pet type and breed are required for pet characters");
       }
     }
 
@@ -142,9 +152,50 @@ const updateCharacter = async (characterId, userId, updateData) => {
       updateData.character_type !== existingCharacter.character_type
     ) {
       if (updateData.character_type === "human") {
-        if (!updateData.age || !updateData.gender) {
-          throw new Error("Age and gender are required for human characters");
+        if (!updateData.age || !updateData.gender || !updateData.ethnicity) {
+          throw new Error(
+            "Age, gender, and ethnicity are required for human characters"
+          );
         }
+      } else if (updateData.character_type === "pet") {
+        if (!updateData.pet_type || !updateData.breed) {
+          throw new Error("Pet type and breed are required for pet characters");
+        }
+      }
+    }
+
+    // Validate required fields for existing character type
+    const finalCharacterType =
+      updateData.character_type || existingCharacter.character_type;
+    if (finalCharacterType === "human") {
+      const age =
+        updateData.age !== undefined ? updateData.age : existingCharacter.age;
+      const gender =
+        updateData.gender !== undefined
+          ? updateData.gender
+          : existingCharacter.gender;
+      const ethnicity =
+        updateData.ethnicity !== undefined
+          ? updateData.ethnicity
+          : existingCharacter.ethnicity;
+
+      if (!age || !gender || !ethnicity) {
+        throw new Error(
+          "Age, gender, and ethnicity are required for human characters"
+        );
+      }
+    } else if (finalCharacterType === "pet") {
+      const petType =
+        updateData.pet_type !== undefined
+          ? updateData.pet_type
+          : existingCharacter.pet_type;
+      const breed =
+        updateData.breed !== undefined
+          ? updateData.breed
+          : existingCharacter.breed;
+
+      if (!petType || !breed) {
+        throw new Error("Pet type and breed are required for pet characters");
       }
     }
 
@@ -220,15 +271,16 @@ const deleteCharacter = async (characterId, userId) => {
  */
 const getCharacterUsageInBooks = async (characterId) => {
   try {
-    // TODO: Implement this when Book model is available
-    // For now, return empty array
-    // const books = await Book.find({ character_ids: characterId }).select('title');
-    // return books.map(book => book.title);
+    const { Book } = require("../models");
+    const books = await Book.find({ character_ids: characterId }).select(
+      "title"
+    );
+    const bookTitles = books.map((book) => book.title);
 
     logger.info(
-      `Checked character usage for ${characterId} (not implemented yet)`
+      `Checked character usage for ${characterId}: found in ${bookTitles.length} books`
     );
-    return [];
+    return bookTitles;
   } catch (error) {
     logger.error(`Error checking character usage: ${error.message}`);
     throw error;

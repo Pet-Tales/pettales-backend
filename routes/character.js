@@ -25,37 +25,31 @@ const humanCharacterValidation = [
     .isIn(["boy", "girl"])
     .withMessage("Gender must be either 'boy' or 'girl' for human characters"),
   body("ethnicity")
-    .optional()
+    .if(body("character_type").equals("human"))
+    .notEmpty()
+    .withMessage("Ethnicity is required for human characters")
     .trim(),
-  body("hair_color")
-    .optional()
-    .trim(),
-  body("eye_color")
-    .optional()
-    .trim(),
+  body("hair_color").optional().trim(),
+  body("eye_color").optional().trim(),
 ];
 
 const petCharacterValidation = [
   body("pet_type")
-    .optional()
+    .if(body("character_type").equals("pet"))
+    .notEmpty()
+    .withMessage("Pet type is required for pet characters")
     .trim(),
   body("breed")
-    .optional()
+    .if(body("character_type").equals("pet"))
+    .notEmpty()
+    .withMessage("Breed is required for pet characters")
     .trim(),
-  body("fur")
-    .optional()
-    .trim(),
-  body("ears")
-    .optional()
-    .trim(),
-  body("tail")
-    .optional()
-    .trim(),
+  body("fur").optional().trim(),
+  body("ears").optional().trim(),
+  body("tail").optional().trim(),
 ];
 
-const personalityValidation = body("personality")
-  .optional()
-  .trim();
+const personalityValidation = body("personality").optional().trim();
 
 const createCharacterValidation = [
   characterNameValidation,
@@ -106,9 +100,7 @@ const imageUploadValidation = [
 ];
 
 const imageUrlValidation = [
-  body("imageUrl")
-    .isURL()
-    .withMessage("Image URL must be a valid URL"),
+  body("imageUrl").isURL().withMessage("Image URL must be a valid URL"),
 ];
 
 // Routes

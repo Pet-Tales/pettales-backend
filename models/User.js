@@ -81,32 +81,6 @@ const userSchema = new mongoose.Schema(
       enum: ["en", "es"],
       default: "en",
     },
-    notification_preferences: {
-      email_verification: {
-        type: Boolean,
-        default: true,
-      },
-      welcome: {
-        type: Boolean,
-        default: true,
-      },
-      low_credits: {
-        type: Boolean,
-        default: true,
-      },
-      generation_updates: {
-        type: Boolean,
-        default: true,
-      },
-      marketing: {
-        type: Boolean,
-        default: false,
-      },
-      system_updates: {
-        type: Boolean,
-        default: true,
-      },
-    },
     status: {
       type: String,
       enum: ["active", "suspended", "deleted"],

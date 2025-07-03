@@ -57,7 +57,19 @@ const characterSchema = new mongoose.Schema(
     ethnicity: {
       type: String,
       trim: true,
-      default: null,
+      required: function () {
+        return this.character_type === "human";
+      },
+      validate: {
+        validator: function (value) {
+          // Only validate if this is a human character
+          if (this.character_type === "human") {
+            return value != null && value.trim().length > 0;
+          }
+          return true;
+        },
+        message: "Ethnicity is required for human characters",
+      },
     },
     hair_color: {
       type: String,
@@ -73,12 +85,36 @@ const characterSchema = new mongoose.Schema(
     pet_type: {
       type: String,
       trim: true,
-      default: null,
+      required: function () {
+        return this.character_type === "pet";
+      },
+      validate: {
+        validator: function (value) {
+          // Only validate if this is a pet character
+          if (this.character_type === "pet") {
+            return value != null && value.trim().length > 0;
+          }
+          return true;
+        },
+        message: "Pet type is required for pet characters",
+      },
     },
     breed: {
       type: String,
       trim: true,
-      default: null,
+      required: function () {
+        return this.character_type === "pet";
+      },
+      validate: {
+        validator: function (value) {
+          // Only validate if this is a pet character
+          if (this.character_type === "pet") {
+            return value != null && value.trim().length > 0;
+          }
+          return true;
+        },
+        message: "Breed is required for pet characters",
+      },
     },
     fur: {
       type: String,
@@ -104,16 +140,6 @@ const characterSchema = new mongoose.Schema(
     reference_image_url: {
       type: String,
       default: null,
-      validate: {
-        validator: function (value) {
-          // Reference image is only for pet characters
-          if (this.character_type === "human" && value) {
-            return false;
-          }
-          return true;
-        },
-        message: "Reference image is only allowed for pet characters",
-      },
     },
   },
   {
@@ -134,7 +160,7 @@ characterSchema.pre("save", function (next) {
     this.fur = null;
     this.ears = null;
     this.tail = null;
-    this.reference_image_url = null;
+    // Note: reference_image_url is now allowed for human characters
   } else if (this.character_type === "pet") {
     // Clear human-specific fields for pet characters
     this.age = null;
@@ -159,54 +185,54 @@ characterSchema.set("toJSON", {
     ret.id = ret._id;
     delete ret._id;
     delete ret.__v;
-    
+
     // Convert user_id to userId for frontend consistency
     if (ret.user_id) {
       ret.userId = ret.user_id;
       delete ret.user_id;
     }
-    
+
     // Convert field names to camelCase for frontend consistency
     if (ret.character_name) {
       ret.characterName = ret.character_name;
       delete ret.character_name;
     }
-    
+
     if (ret.character_type) {
       ret.characterType = ret.character_type;
       delete ret.character_type;
     }
-    
+
     if (ret.pet_type) {
       ret.petType = ret.pet_type;
       delete ret.pet_type;
     }
-    
+
     if (ret.hair_color) {
       ret.hairColor = ret.hair_color;
       delete ret.hair_color;
     }
-    
+
     if (ret.eye_color) {
       ret.eyeColor = ret.eye_color;
       delete ret.eye_color;
     }
-    
+
     if (ret.reference_image_url) {
       ret.referenceImageUrl = ret.reference_image_url;
       delete ret.reference_image_url;
     }
-    
+
     if (ret.created_at) {
       ret.createdAt = ret.created_at;
       delete ret.created_at;
     }
-    
+
     if (ret.updated_at) {
       ret.updatedAt = ret.updated_at;
       delete ret.updated_at;
     }
-    
+
     return ret;
   },
 });

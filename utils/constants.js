@@ -17,6 +17,7 @@ const API_BASE_URL = process.env.API_BASE_URL || "http://127.0.0.1:8080";
 const MONGODB_URI = process.env.MONGODB_URI;
 
 // Authentication & Security
+const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN;
 const JWT_SECRET = process.env.JWT_SECRET;
 const SESSION_SECRET = process.env.SESSION_SECRET;
 
@@ -33,13 +34,15 @@ const CLOUDFRONT_URL = process.env.CLOUDFRONT_URL;
 
 // Email Configuration
 const NO_REPLY_EMAIL_ADDRESS = process.env.NO_REPLY_EMAIL_ADDRESS;
-const FROM_EMAIL = process.env.FROM_EMAIL;
 const FROM_NAME = process.env.FROM_NAME || "PetTalesAI";
 
 // Stripe Configuration
 const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY;
-const STRIPE_PUBLISHABLE_KEY = process.env.STRIPE_PUBLISHABLE_KEY;
+const STRIPE_PUBLIC_KEY = process.env.STRIPE_PUBLIC_KEY;
 const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET;
+
+// Webhook Configuration
+const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET;
 
 // Application Constants
 const DEFAULT_CREDITS_BALANCE = 10;
@@ -115,6 +118,7 @@ module.exports = {
   MONGODB_URI,
 
   // Authentication
+  JWT_EXPIRES_IN,
   JWT_SECRET,
   SESSION_SECRET,
 
@@ -131,13 +135,15 @@ module.exports = {
 
   // Email
   NO_REPLY_EMAIL_ADDRESS,
-  FROM_EMAIL,
   FROM_NAME,
 
   // Stripe
   STRIPE_SECRET_KEY,
-  STRIPE_PUBLISHABLE_KEY,
+  STRIPE_PUBLIC_KEY,
   STRIPE_WEBHOOK_SECRET,
+
+  // Webhook
+  WEBHOOK_SECRET,
 
   // Application Constants
   DEFAULT_CREDITS_BALANCE,
