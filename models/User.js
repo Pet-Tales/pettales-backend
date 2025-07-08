@@ -132,9 +132,68 @@ userSchema.virtual("full_name").get(function () {
 userSchema.set("toJSON", {
   virtuals: true,
   transform: function (doc, ret) {
+    // Convert _id to id for frontend consistency
+    ret.id = ret._id;
+    delete ret._id;
+    delete ret.__v;
+
+    // Remove sensitive fields
     delete ret.password_hash;
     delete ret.email_verification_token;
     delete ret.password_reset_token;
+    delete ret.email_change_token;
+
+    // Convert field names to camelCase for frontend consistency
+    if (ret.first_name !== undefined) {
+      ret.firstName = ret.first_name;
+      delete ret.first_name;
+    }
+
+    if (ret.last_name !== undefined) {
+      ret.lastName = ret.last_name;
+      delete ret.last_name;
+    }
+
+    if (ret.profile_image_url !== undefined) {
+      ret.profileImageUrl = ret.profile_image_url;
+      delete ret.profile_image_url;
+    }
+
+    if (ret.preferred_language !== undefined) {
+      ret.preferredLanguage = ret.preferred_language;
+      delete ret.preferred_language;
+    }
+
+    if (ret.email_verified !== undefined) {
+      ret.emailVerified = ret.email_verified;
+      delete ret.email_verified;
+    }
+
+    if (ret.credits_balance !== undefined) {
+      ret.creditsBalance = ret.credits_balance;
+      delete ret.credits_balance;
+    }
+
+    if (ret.new_email !== undefined) {
+      ret.pendingEmailChange = ret.new_email;
+      delete ret.new_email;
+    }
+
+    if (ret.created_at) {
+      ret.createdAt = ret.created_at;
+      delete ret.created_at;
+    }
+
+    if (ret.updated_at) {
+      ret.updatedAt = ret.updated_at;
+      delete ret.updated_at;
+    }
+
+    if (ret.deleted_at) {
+      ret.deletedAt = ret.deleted_at;
+      delete ret.deleted_at;
+    }
+
     return ret;
   },
 });

@@ -44,6 +44,9 @@ const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET;
 // Webhook Configuration
 const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET;
 
+// AWS Lambda Configuration
+const AWS_LAMBDA_FUNCTION_NAME = process.env.AWS_LAMBDA_FUNCTION_NAME;
+
 // Application Constants
 const DEFAULT_CREDITS_BALANCE = 10;
 const SESSION_EXPIRY_DAYS = 7;
@@ -144,6 +147,9 @@ module.exports = {
 
   // Webhook
   WEBHOOK_SECRET,
+
+  // AWS Lambda
+  AWS_LAMBDA_FUNCTION_NAME,
 
   // Application Constants
   DEFAULT_CREDITS_BALANCE,
