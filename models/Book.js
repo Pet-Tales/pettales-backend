@@ -75,6 +75,22 @@ const bookSchema = new mongoose.Schema(
       type: [String],
       default: [],
     },
+    front_cover_prompt: {
+      type: String,
+      trim: true,
+      default: null,
+    },
+    back_cover_prompt: {
+      type: String,
+      trim: true,
+      default: null,
+    },
+    generation_seed: {
+      type: Number,
+      default: null,
+      min: 0,
+      max: 4294967295, // 32-bit unsigned integer max value
+    },
     is_public: {
       type: Boolean,
       default: false,
@@ -91,6 +107,11 @@ const bookSchema = new mongoose.Schema(
     pdf_url: {
       type: String,
       default: null,
+    },
+    pdf_needs_regeneration: {
+      type: Boolean,
+      default: false,
+      index: true,
     },
     canva_design_id: {
       type: String,
@@ -166,6 +187,11 @@ bookSchema.set("toJSON", {
       delete ret.pdf_url;
     }
 
+    if (ret.pdf_needs_regeneration !== undefined) {
+      ret.pdfNeedsRegeneration = ret.pdf_needs_regeneration;
+      delete ret.pdf_needs_regeneration;
+    }
+
     if (ret.is_public !== undefined) {
       ret.isPublic = ret.is_public;
       delete ret.is_public;
@@ -174,6 +200,16 @@ bookSchema.set("toJSON", {
     if (ret.moral_of_back_cover) {
       ret.moralOfBackCover = ret.moral_of_back_cover;
       delete ret.moral_of_back_cover;
+    }
+
+    if (ret.front_cover_prompt) {
+      ret.frontCoverPrompt = ret.front_cover_prompt;
+      delete ret.front_cover_prompt;
+    }
+
+    if (ret.back_cover_prompt) {
+      ret.backCoverPrompt = ret.back_cover_prompt;
+      delete ret.back_cover_prompt;
     }
 
     if (ret.illustration_style) {

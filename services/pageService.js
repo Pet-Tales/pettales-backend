@@ -163,6 +163,16 @@ class PageService {
         runValidators: true,
       }).populate("book_id");
 
+      // Set PDF regeneration flag on the associated book since page content changed
+      if (book.generation_status === "completed") {
+        await Book.findByIdAndUpdate(book._id, {
+          pdf_needs_regeneration: true,
+        });
+        logger.info(
+          `PDF regeneration flag set for book ${book._id} due to page content changes`
+        );
+      }
+
       logger.info(`Page updated successfully: ${pageId}`);
       return updatedPage;
     } catch (error) {

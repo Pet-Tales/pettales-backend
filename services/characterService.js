@@ -22,8 +22,12 @@ const getUserCharacters = async (userId, page = 1, limit = 12, type = null) => {
     }
 
     // Get characters with pagination (without lean() to enable toJSON transformation)
+    // Sort by character type (human first, then pet) and alphabetically by name within each group
     const charactersRaw = await Character.find(query)
-      .sort({ created_at: -1 }) // Most recent first
+      .sort({
+        character_type: 1, // 'human' comes before 'pet' alphabetically
+        character_name: 1, // Alphabetical order within each type
+      })
       .skip(skip)
       .limit(limit);
 
@@ -92,6 +96,8 @@ const getCharacterById = async (characterId, userId) => {
  */
 const createCharacter = async (userId, characterData) => {
   try {
+    // Reference images are now allowed for all character types
+
     // Validate required fields based on character type
     if (characterData.character_type === "human") {
       if (
@@ -146,6 +152,12 @@ const updateCharacter = async (characterId, userId, updateData) => {
       return null;
     }
 
+    // Determine final character type
+    const finalCharacterType =
+      updateData.character_type || existingCharacter.character_type;
+
+    // Reference images are now allowed for all character types
+
     // Validate type-specific fields if character_type is being changed
     if (
       updateData.character_type &&
@@ -165,8 +177,6 @@ const updateCharacter = async (characterId, userId, updateData) => {
     }
 
     // Validate required fields for existing character type
-    const finalCharacterType =
-      updateData.character_type || existingCharacter.character_type;
     if (finalCharacterType === "human") {
       const age =
         updateData.age !== undefined ? updateData.age : existingCharacter.age;

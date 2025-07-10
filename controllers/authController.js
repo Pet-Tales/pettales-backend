@@ -468,8 +468,20 @@ const googleCallback = async (req, res) => {
     logger.info("Setting session cookie with options:", cookieOptions);
     res.cookie("session_token", sessionToken, cookieOptions);
 
+    // Check for stored redirect parameter from cookie
+    const redirectPath = req.cookies.oauth_redirect;
+
+    // Clear the redirect cookie
+    if (redirectPath) {
+      res.clearCookie("oauth_redirect");
+    }
+
     // Redirect to frontend
-    res.redirect(`${WEB_URL}/dashboard`);
+    if (redirectPath) {
+      res.redirect(`${WEB_URL}${redirectPath}`);
+    } else {
+      res.redirect(`${WEB_URL}/dashboard`);
+    }
   } catch (error) {
     logger.error(`Google callback error: ${error}`);
     res.redirect(`${WEB_URL}/login?error=auth_failed`);

@@ -6,6 +6,7 @@ const webhookRoutes = require("./webhook");
 const bookRoutes = require("./book");
 const pageRoutes = require("./page");
 const galleryRoutes = require("./gallery");
+const illustrationRoutes = require("./illustrationRoutes");
 
 const router = express.Router();
 
@@ -26,6 +27,9 @@ router.use("/pages", pageRoutes);
 
 // Mount gallery routes (public, no auth required)
 router.use("/gallery", galleryRoutes);
+
+// Mount illustration routes
+router.use("/illustrations", illustrationRoutes);
 
 // Mount webhook routes
 router.use("/webhook", webhookRoutes);

@@ -91,6 +91,20 @@ if (GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET) {
   router.get(
     "/google",
     requireGuest,
+    (req, res, next) => {
+      // Pass redirect parameter through OAuth state
+      const redirectPath = req.query.redirect;
+      if (redirectPath) {
+        // Store redirect in a temporary cookie that expires in 10 minutes
+        res.cookie("oauth_redirect", redirectPath, {
+          httpOnly: true,
+          secure: !require("../utils/constants").DEBUG_MODE,
+          sameSite: "lax",
+          maxAge: 10 * 60 * 1000, // 10 minutes
+        });
+      }
+      next();
+    },
     passport.authenticate("google", {
       scope: ["profile", "email"],
     })

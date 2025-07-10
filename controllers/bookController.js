@@ -1,6 +1,7 @@
 const { validationResult } = require("express-validator");
 const mongoose = require("mongoose");
 const BookService = require("../services/bookService");
+const { pdfRegenerationService } = require("../services/pdfService");
 const logger = require("../utils/logger");
 // const { useErrorTranslation } = require("../utils/errorMapper");
 
@@ -440,6 +441,110 @@ const retryBookGeneration = async (req, res) => {
   }
 };
 
+/**
+ * Regenerate PDF for a book
+ */
+const regeneratePDF = async (req, res) => {
+  try {
+    // Check for validation errors
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        message: "Validation failed",
+        errors: errors.array(),
+      });
+    }
+
+    const { id } = req.params;
+    const userId = req.user._id.toString();
+
+    // Additional check for valid ObjectId format
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid book ID format",
+      });
+    }
+
+    logger.info(`User ${userId} regenerating PDF for book ${id}`);
+
+    const newPdfUrl = await pdfRegenerationService.regeneratePDF(id, userId);
+
+    res.json({
+      success: true,
+      message: "PDF regenerated successfully",
+      data: { pdfUrl: newPdfUrl },
+    });
+  } catch (error) {
+    logger.error(`Regenerate PDF error: ${error.message}`);
+
+    // Handle specific errors
+    if (error.message === "Book not found") {
+      return res.status(404).json({
+        success: false,
+        message: "Book not found",
+      });
+    }
+
+    if (error.message === "Access denied") {
+      return res.status(403).json({
+        success: false,
+        message: "Access denied",
+      });
+    }
+
+    if (error.message === "Book generation not completed") {
+      return res.status(400).json({
+        success: false,
+        message: "Book generation not completed",
+      });
+    }
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to regenerate PDF",
+      error: error.message,
+    });
+  }
+};
+
+/**
+ * Check if book content has changed since PDF was generated
+ */
+const checkPDFStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user._id.toString();
+
+    // Additional check for valid ObjectId format
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid book ID format",
+      });
+    }
+
+    const hasChanged = await pdfRegenerationService.hasContentChanged(id);
+
+    res.json({
+      success: true,
+      data: {
+        hasContentChanged: hasChanged,
+        needsRegeneration: hasChanged,
+      },
+    });
+  } catch (error) {
+    logger.error(`Check PDF status error: ${error.message}`);
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to check PDF status",
+      error: error.message,
+    });
+  }
+};
+
 module.exports = {
   createBook,
   getUserBooks,
@@ -448,4 +553,6 @@ module.exports = {
   toggleBookPublic,
   deleteBook,
   retryBookGeneration,
+  regeneratePDF,
+  checkPDFStatus,
 };

@@ -24,7 +24,7 @@ const pageSchema = new mongoose.Schema(
     // Text page fields
     text_content: {
       type: String,
-      required: function() {
+      required: function () {
         return this.page_type === "text";
       },
       trim: true,
@@ -32,29 +32,38 @@ const pageSchema = new mongoose.Schema(
     // Illustration page fields
     illustration_url: {
       type: String,
-      required: function() {
+      required: function () {
         return this.page_type === "illustration";
       },
     },
     illustration_prompt: {
       type: String,
-      required: function() {
+      required: function () {
         return this.page_type === "illustration";
       },
       trim: true,
+    },
+    illustration_seed: {
+      type: Number,
+      required: function () {
+        return this.page_type === "illustration";
+      },
+      min: 0,
+      max: 4294967295, // 32-bit unsigned integer max value
     },
     alternative_illustrations: {
       type: [String],
       default: [],
       validate: {
-        validator: function(value) {
+        validator: function (value) {
           // Only illustration pages should have alternative illustrations
           if (this.page_type === "text" && value.length > 0) {
             return false;
           }
           return true;
         },
-        message: "Alternative illustrations are only allowed for illustration pages",
+        message:
+          "Alternative illustrations are only allowed for illustration pages",
       },
     },
   },

@@ -47,6 +47,20 @@ const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET;
 // AWS Lambda Configuration
 const AWS_LAMBDA_FUNCTION_NAME = process.env.AWS_LAMBDA_FUNCTION_NAME;
 
+// Replicate Configuration
+const REPLICATE_API_TOKEN = process.env.REPLICATE_API_TOKEN;
+
+// Illustration Styles
+const ILLUST_ANIME =
+  process.env.ILLUST_ANIME ||
+  "https://storage-staging.pettales.ai/_static/illustration_styles/illust_anime_9.jpg";
+const ILLUST_DISNEY =
+  process.env.ILLUST_DISNEY ||
+  "https://storage-staging.pettales.ai/_static/illustration_styles/illust_disney_9.jpg";
+const ILLUST_VECTOR_ART =
+  process.env.ILLUST_VECTOR_ART ||
+  "https://storage-staging.pettales.ai/_static/illustration_styles/illust_vector_art_9.jpg";
+
 // Application Constants
 const DEFAULT_CREDITS_BALANCE = 10;
 const SESSION_EXPIRY_DAYS = 7;
@@ -150,6 +164,14 @@ module.exports = {
 
   // AWS Lambda
   AWS_LAMBDA_FUNCTION_NAME,
+
+  // Replicate
+  REPLICATE_API_TOKEN,
+
+  // Illustration Styles
+  ILLUST_ANIME,
+  ILLUST_DISNEY,
+  ILLUST_VECTOR_ART,
 
   // Application Constants
   DEFAULT_CREDITS_BALANCE,

@@ -164,4 +164,20 @@ router.post(
   bookController.retryBookGeneration
 );
 
+// Regenerate PDF for a book
+router.post(
+  "/:id/regenerate-pdf",
+  requireAuth,
+  mongoIdValidation,
+  bookController.regeneratePDF
+);
+
+// Check if book content has changed (for PDF regeneration button state)
+router.get(
+  "/:id/pdf-status",
+  requireAuth,
+  mongoIdValidation,
+  bookController.checkPDFStatus
+);
+
 module.exports = router;

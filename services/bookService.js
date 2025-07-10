@@ -223,6 +223,17 @@ class BookService {
       ];
 
       const filteredUpdate = {};
+      let pdfContentChanged = false;
+
+      // Fields that affect PDF content
+      const pdfAffectingFields = [
+        "title",
+        "dedication",
+        "moral_of_back_cover",
+        "front_cover_image_url",
+        "back_cover_image_url",
+      ];
+
       Object.keys(updateData).forEach((key) => {
         if (allowedFields.includes(key)) {
           // Special validation for cover URLs
@@ -242,9 +253,26 @@ class BookService {
               );
             }
           }
+
+          // Check if this field affects PDF content
+          if (
+            pdfAffectingFields.includes(key) &&
+            updateData[key] !== book[key]
+          ) {
+            pdfContentChanged = true;
+          }
+
           filteredUpdate[key] = updateData[key];
         }
       });
+
+      // Set PDF regeneration flag if content that affects PDF was changed
+      if (pdfContentChanged && book.generation_status === "completed") {
+        filteredUpdate.pdf_needs_regeneration = true;
+        logger.info(
+          `PDF regeneration flag set for book ${bookId} due to content changes`
+        );
+      }
 
       const updatedBook = await Book.findByIdAndUpdate(bookId, filteredUpdate, {
         new: true,

@@ -307,13 +307,10 @@ const generateImageUploadUrl = async (req, res) => {
       });
     }
 
-    // Debug logging to see what character type we retrieved
-    logger.info(
-      `Character ${id} type check: ${character.characterType} (expected: pet)`
-    );
+    // Reference images are now allowed for all character types
+
     logger.info(`Full character data:`, JSON.stringify(character, null, 2));
 
-    // Reference images are now allowed for both human and pet characters
     logger.info(
       `Generating image upload URL for ${character.characterType} character: ${id}`
     );
@@ -390,7 +387,8 @@ const updateCharacterImage = async (req, res) => {
       });
     }
 
-    // Reference images are now allowed for both human and pet characters
+    // Reference images are now allowed for all character types
+
     logger.info(
       `Updating reference image for ${character.characterType} character: ${id}`
     );
@@ -461,6 +459,8 @@ const deleteCharacterImage = async (req, res) => {
         message: "Character not found",
       });
     }
+
+    // Reference images are now allowed for all character types
 
     // Check if character has a reference image (field is transformed to camelCase by toJSON)
     if (!character.referenceImageUrl) {

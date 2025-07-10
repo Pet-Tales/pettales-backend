@@ -160,7 +160,6 @@ characterSchema.pre("save", function (next) {
     this.fur = null;
     this.ears = null;
     this.tail = null;
-    // Note: reference_image_url is now allowed for human characters
   } else if (this.character_type === "pet") {
     // Clear human-specific fields for pet characters
     this.age = null;

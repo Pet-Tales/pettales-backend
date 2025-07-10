@@ -3,6 +3,7 @@ const {
   PutObjectCommand,
   DeleteObjectCommand,
 } = require("@aws-sdk/client-s3");
+const fs = require("fs");
 const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 const logger = require("../utils/logger");
 const {
@@ -70,6 +71,40 @@ const generatePresignedUploadUrl = async (
     return presignedUrl;
   } catch (error) {
     logger.error(`Failed to generate presigned upload URL: ${error.message}`);
+    throw error;
+  }
+};
+
+/**
+ * Upload a local file to S3
+ * @param {string} localPath - Local file path
+ * @param {string} s3Key - S3 key (file path)
+ * @param {string} contentType - MIME type
+ * @returns {Promise<string>} - CloudFront URL
+ */
+const uploadLocalFile = async (localPath, s3Key, contentType) => {
+  try {
+    // Check if S3 configuration is available
+    if (!S3_BUCKET_NAME) {
+      throw new Error("S3 bucket name not configured");
+    }
+
+    const client = getS3Client();
+    const fileContent = fs.readFileSync(localPath);
+
+    const command = new PutObjectCommand({
+      Bucket: S3_BUCKET_NAME,
+      Key: s3Key,
+      Body: fileContent,
+      ContentType: contentType,
+      ACL: "public-read",
+    });
+
+    await client.send(command);
+    logger.info(`Successfully uploaded ${s3Key} to S3`);
+    return generateCloudFrontUrl(s3Key);
+  } catch (error) {
+    logger.error(`Failed to upload local file to S3: ${error.message}`);
     throw error;
   }
 };
@@ -215,8 +250,76 @@ const getFileExtensionFromContentType = (contentType) => {
   return typeMap[contentType.toLowerCase()] || "jpg";
 };
 
+/**
+ * Generate S3 key for book illustration
+ * @param {string} userId - User MongoDB ID
+ * @param {string} bookId - Book MongoDB ID
+ * @param {string} pageId - Page MongoDB ID
+ * @param {number} alternativeNumber - Alternative number (0 for main)
+ * @param {string} extension - File extension
+ * @returns {string} - S3 key
+ */
+const generateIllustrationS3Key = (
+  userId,
+  bookId,
+  pageId,
+  alternativeNumber,
+  extension
+) => {
+  const timestamp = Date.now();
+  return `${userId}/books/${bookId}/illustrations/illustration_${pageId}_${alternativeNumber}_${timestamp}.${extension}`;
+};
+
+/**
+ * Generate S3 key for front cover
+ * @param {string} userId - User MongoDB ID
+ * @param {string} bookId - Book MongoDB ID
+ * @param {number} alternativeNumber - Alternative number (0 for main)
+ * @param {string} extension - File extension
+ * @returns {string} - S3 key
+ */
+const generateFrontCoverS3Key = (
+  userId,
+  bookId,
+  alternativeNumber,
+  extension
+) => {
+  const timestamp = Date.now();
+  return `${userId}/books/${bookId}/front_cover_${bookId}_${alternativeNumber}_${timestamp}.${extension}`;
+};
+
+/**
+ * Generate S3 key for back cover
+ * @param {string} userId - User MongoDB ID
+ * @param {string} bookId - Book MongoDB ID
+ * @param {number} alternativeNumber - Alternative number (0 for main)
+ * @param {string} extension - File extension
+ * @returns {string} - S3 key
+ */
+const generateBackCoverS3Key = (
+  userId,
+  bookId,
+  alternativeNumber,
+  extension
+) => {
+  const timestamp = Date.now();
+  return `${userId}/books/${bookId}/back_cover_${bookId}_${alternativeNumber}_${timestamp}.${extension}`;
+};
+
+/**
+ * Generate S3 key for PDF book
+ * @param {string} userId - User MongoDB ID
+ * @param {string} bookId - Book MongoDB ID
+ * @returns {string} - S3 key
+ */
+const generateBookPdfS3Key = (userId, bookId) => {
+  const timestamp = Date.now();
+  return `${userId}/books/${bookId}/book_${bookId}_${timestamp}.pdf`;
+};
+
 module.exports = {
   generatePresignedUploadUrl,
+  uploadLocalFile,
   deleteFile,
   extractS3KeyFromCloudFrontUrl,
   generateCloudFrontUrl,
@@ -224,6 +327,10 @@ module.exports = {
   generateAvatarS3Key,
   generateCharacterImageFileName,
   generateCharacterImageS3Key,
+  generateIllustrationS3Key,
+  generateFrontCoverS3Key,
+  generateBackCoverS3Key,
+  generateBookPdfS3Key,
   isValidAvatarFileType,
   getFileExtensionFromContentType,
 };
