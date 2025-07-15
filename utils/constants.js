@@ -35,6 +35,7 @@ const CLOUDFRONT_URL = process.env.CLOUDFRONT_URL;
 // Email Configuration
 const NO_REPLY_EMAIL_ADDRESS = process.env.NO_REPLY_EMAIL_ADDRESS;
 const FROM_NAME = process.env.FROM_NAME || "PetTalesAI";
+const CONTACT_EMAIL_ADDRESS = process.env.CONTACT_EMAIL_ADDRESS;
 
 // Stripe Configuration
 const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY;
@@ -170,6 +171,7 @@ module.exports = {
   // Email
   NO_REPLY_EMAIL_ADDRESS,
   FROM_NAME,
+  CONTACT_EMAIL_ADDRESS,
 
   // Stripe
   STRIPE_SECRET_KEY,

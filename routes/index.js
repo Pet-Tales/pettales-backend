@@ -8,6 +8,7 @@ const pageRoutes = require("./page");
 const galleryRoutes = require("./gallery");
 const illustrationRoutes = require("./illustrationRoutes");
 const creditRoutes = require("./credit");
+const contactRoutes = require("./contact");
 
 const router = express.Router();
 
@@ -34,6 +35,9 @@ router.use("/illustrations", illustrationRoutes);
 
 // Mount credit routes
 router.use("/credits", creditRoutes);
+
+// Mount contact routes (public, no auth required)
+router.use("/contact", contactRoutes);
 
 // Mount webhook routes
 router.use("/webhook", webhookRoutes);

@@ -5,6 +5,7 @@ const passwordChangeConfirmation = require("./passwordChangeConfirmation");
 const emailChangeVerification = require("./emailChangeVerification");
 const bookGenerationSuccess = require("./bookGenerationSuccess");
 const bookGenerationFailure = require("./bookGenerationFailure");
+const contactForm = require("./contactForm");
 
 module.exports = {
   emailVerification,
@@ -14,4 +15,5 @@ module.exports = {
   emailChangeVerification,
   bookGenerationSuccess,
   bookGenerationFailure,
+  contactForm,
 };

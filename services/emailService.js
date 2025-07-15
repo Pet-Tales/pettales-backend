@@ -8,6 +8,7 @@ const {
   FROM_NAME,
   NO_REPLY_EMAIL_ADDRESS,
   WEB_URL,
+  CONTACT_EMAIL_ADDRESS,
 } = require("../utils/constants");
 
 // Lazy-load SES client to ensure environment variables are loaded
@@ -287,6 +288,85 @@ const sendBookGenerationFailure = async (
   );
 };
 
+/**
+ * Send contact form submission email
+ * @param {string} name - Contact person's name
+ * @param {string} email - Contact person's email
+ * @param {string} subject - Contact subject
+ * @param {string} message - Contact message
+ * @param {string} language - User's preferred language (default: 'en')
+ */
+const sendContactForm = async (
+  name,
+  email,
+  subject,
+  message,
+  language = "en"
+) => {
+  // Check if contact email is configured
+  if (!CONTACT_EMAIL_ADDRESS) {
+    logger.warn(
+      "Contact email address not configured. Skipping contact form email.",
+      {
+        name,
+        email,
+        subject,
+      }
+    );
+    return {
+      success: false,
+      message: "Contact email not configured",
+    };
+  }
+
+  const template = getEmailTemplate(language, "contactForm", {
+    name,
+    email,
+    subject,
+    message,
+  });
+
+  // Send email to the configured contact email address
+  // Set the reply-to as the user's email so responses go directly to them
+  const params = {
+    Source: `"${FROM_NAME}" <${NO_REPLY_EMAIL_ADDRESS}>`,
+    Destination: {
+      ToAddresses: [CONTACT_EMAIL_ADDRESS],
+    },
+    ReplyToAddresses: [email], // This allows direct replies to the user
+    Message: {
+      Subject: {
+        Data: template.subject,
+        Charset: "UTF-8",
+      },
+      Body: {
+        Text: {
+          Data: template.textBody,
+          Charset: "UTF-8",
+        },
+        Html: {
+          Data: template.htmlBody,
+          Charset: "UTF-8",
+        },
+      },
+    },
+  };
+
+  try {
+    const client = getSESClient();
+    const command = new SendEmailCommand(params);
+    const result = await client.send(command);
+    logger.info("Contact form email sent successfully:", result.MessageId);
+    return {
+      success: true,
+      messageId: result.MessageId,
+    };
+  } catch (error) {
+    logger.error(`Error sending contact form email: ${error}`);
+    throw new Error(`Failed to send contact form email: ${error.message}`);
+  }
+};
+
 module.exports = {
   sendEmail,
   sendEmailVerification,
@@ -296,4 +376,5 @@ module.exports = {
   sendEmailChangeVerification,
   sendBookGenerationSuccess,
   sendBookGenerationFailure,
+  sendContactForm,
 };
