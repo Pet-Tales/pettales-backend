@@ -6,6 +6,9 @@ const {
   regeneratePageIllustration,
 } = require("../controllers/illustrationController");
 const { requireAuth } = require("../middleware");
+const {
+  validateRegenerationCredits,
+} = require("../middleware/creditMiddleware");
 
 /**
  * @route POST /api/illustrations/regenerate/front-cover/:bookId
@@ -15,6 +18,7 @@ const { requireAuth } = require("../middleware");
 router.post(
   "/regenerate/front-cover/:bookId",
   requireAuth,
+  validateRegenerationCredits,
   regenerateFrontCover
 );
 
@@ -23,7 +27,12 @@ router.post(
  * @desc Regenerate back cover illustration
  * @access Private (Book Owner)
  */
-router.post("/regenerate/back-cover/:bookId", requireAuth, regenerateBackCover);
+router.post(
+  "/regenerate/back-cover/:bookId",
+  requireAuth,
+  validateRegenerationCredits,
+  regenerateBackCover
+);
 
 /**
  * @route POST /api/illustrations/regenerate/page/:pageId
@@ -33,6 +42,7 @@ router.post("/regenerate/back-cover/:bookId", requireAuth, regenerateBackCover);
 router.post(
   "/regenerate/page/:pageId",
   requireAuth,
+  validateRegenerationCredits,
   regeneratePageIllustration
 );
 

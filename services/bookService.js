@@ -2,6 +2,7 @@ const mongoose = require("mongoose");
 const { Book, Page, Character } = require("../models");
 const s3Service = require("./s3Service");
 const LambdaService = require("./lambdaService");
+const creditService = require("./creditService");
 const logger = require("../utils/logger");
 
 class BookService {
@@ -13,9 +14,10 @@ class BookService {
    * Create a new book and trigger generation
    * @param {string} userId - User ID
    * @param {Object} bookData - Book creation data
+   * @param {number} requiredCredits - Credits required for generation
    * @returns {Promise<Object>} - Created book
    */
-  async createBook(userId, bookData) {
+  async createBook(userId, bookData, requiredCredits) {
     try {
       // Validate that all characters belong to the user
       const characterIds = bookData.character_ids || bookData.characterIds;
@@ -58,11 +60,22 @@ class BookService {
           savedBook._id.toString()
         );
 
+        // Deduct credits after successful Lambda invocation
+        await creditService.deductCredits(
+          userId,
+          requiredCredits,
+          `Book generation started for "${savedBook.title}" (${savedBook.page_count} pages)`,
+          { bookId: savedBook._id }
+        );
+
         // Update status to generating
         await Book.findByIdAndUpdate(savedBook._id, {
           generation_status: "generating",
         });
-        logger.info(`Lambda invocation successful for book: ${savedBook._id}`);
+
+        logger.info(
+          `Lambda invocation successful for book: ${savedBook._id}, ${requiredCredits} credits deducted`
+        );
       } catch (lambdaError) {
         // Update status to failed if Lambda invocation fails
         await Book.findByIdAndUpdate(savedBook._id, {
@@ -73,6 +86,7 @@ class BookService {
           lambdaError
         );
         // Don't throw error here - book is created but generation failed
+        // No credits are deducted since generation didn't start
       }
 
       return savedBook;

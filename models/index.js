@@ -3,6 +3,7 @@ const Session = require("./Session");
 const Character = require("./Character");
 const Page = require("./Page");
 const Book = require("./Book");
+const CreditTransaction = require("./CreditTransaction");
 
 module.exports = {
   User,
@@ -10,4 +11,5 @@ module.exports = {
   Character,
   Page,
   Book,
+  CreditTransaction,
 };

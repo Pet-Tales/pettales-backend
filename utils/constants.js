@@ -67,6 +67,23 @@ const SESSION_EXPIRY_DAYS = 7;
 const EMAIL_VERIFICATION_EXPIRY_HOURS = 24;
 const PASSWORD_RESET_EXPIRY_HOURS = 1;
 
+// Credit System Constants
+const CREDIT_COSTS = {
+  BOOK_12_PAGES: 250,
+  BOOK_16_PAGES: 300,
+  BOOK_24_PAGES: 350,
+  ILLUSTRATION_REGENERATION: 16,
+};
+
+const FREE_REGENERATION_LIMITS = {
+  12: 3, // 12-page book: 3 free regenerations
+  16: 4, // 16-page book: 4 free regenerations
+  24: 5, // 24-page book: 5 free regenerations
+};
+
+const CREDIT_VALUE_USD = 0.01; // 1 credit = $0.01
+const LOW_CREDIT_THRESHOLD = 100;
+
 // Cookie Configuration
 const COOKIE_OPTIONS = {
   httpOnly: true,
@@ -178,6 +195,12 @@ module.exports = {
   SESSION_EXPIRY_DAYS,
   EMAIL_VERIFICATION_EXPIRY_HOURS,
   PASSWORD_RESET_EXPIRY_HOURS,
+
+  // Credit System Constants
+  CREDIT_COSTS,
+  FREE_REGENERATION_LIMITS,
+  CREDIT_VALUE_USD,
+  LOW_CREDIT_THRESHOLD,
 
   // Cookie Configuration
   COOKIE_OPTIONS,

@@ -100,9 +100,10 @@ const bookSchema = new mongoose.Schema(
       enum: ["pending", "generating", "completed", "failed"],
       default: "pending",
     },
-    credits_used: {
+    regenerations_used: {
       type: Number,
-      default: null,
+      default: 0,
+      min: 0,
     },
     pdf_url: {
       type: String,
@@ -150,6 +151,11 @@ bookSchema.set("toJSON", {
     if (ret.generation_status) {
       ret.generationStatus = ret.generation_status;
       delete ret.generation_status;
+    }
+
+    if (ret.regenerations_used !== undefined) {
+      ret.regenerationsUsed = ret.regenerations_used;
+      delete ret.regenerations_used;
     }
 
     if (ret.page_count) {

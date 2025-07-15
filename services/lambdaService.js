@@ -59,7 +59,10 @@ class LambdaService {
         executedVersion: response.ExecutedVersion,
       };
     } catch (error) {
-      logger.error(`Failed to invoke Lambda function for book ${bookId}:`, error);
+      logger.error(
+        `Failed to invoke Lambda function for book ${bookId}:`,
+        error
+      );
       throw new Error(`Lambda invocation failed: ${error.message}`);
     }
   }
@@ -93,7 +96,7 @@ class LambdaService {
           throw error;
         } else {
           // Calculate exponential backoff delay: 1s, 2s, 4s
-          const delay = Math.pow(2, attempt - 1) * 1000;
+          const delay = Math.pow(2, attempt - 1) * 10000;
           logger.warn(
             `Lambda invocation attempt ${attempt} failed for book ${bookId}, retrying in ${delay}ms:`,
             error.message

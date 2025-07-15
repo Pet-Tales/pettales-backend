@@ -2,6 +2,9 @@ const express = require("express");
 const { body, param, query } = require("express-validator");
 const { bookController } = require("../controllers");
 const { requireAuth } = require("../middleware");
+const {
+  validateBookGenerationCredits,
+} = require("../middleware/creditMiddleware");
 
 const router = express.Router();
 
@@ -123,7 +126,13 @@ const paginationValidation = [
 // Routes
 
 // Create new book
-router.post("/", requireAuth, createBookValidation, bookController.createBook);
+router.post(
+  "/",
+  requireAuth,
+  createBookValidation,
+  validateBookGenerationCredits,
+  bookController.createBook
+);
 
 // Get user's books with pagination
 router.get("/", requireAuth, paginationValidation, bookController.getUserBooks);

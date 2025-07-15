@@ -2,6 +2,7 @@ const { validationResult } = require("express-validator");
 const mongoose = require("mongoose");
 const BookService = require("../services/bookService");
 const { pdfRegenerationService } = require("../services/pdfService");
+const creditService = require("../services/creditService");
 const logger = require("../utils/logger");
 // const { useErrorTranslation } = require("../utils/errorMapper");
 
@@ -24,8 +25,14 @@ const createBook = async (req, res) => {
 
     const userId = req.user._id.toString();
     const bookData = req.body;
+    const requiredCredits = req.requiredCredits; // Set by credit validation middleware
 
-    const book = await bookService.createBook(userId, bookData);
+    // Create book and handle credit deduction
+    const book = await bookService.createBook(
+      userId,
+      bookData,
+      requiredCredits
+    );
 
     res.status(201).json({
       success: true,

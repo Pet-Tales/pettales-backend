@@ -7,6 +7,7 @@ const bookRoutes = require("./book");
 const pageRoutes = require("./page");
 const galleryRoutes = require("./gallery");
 const illustrationRoutes = require("./illustrationRoutes");
+const creditRoutes = require("./credit");
 
 const router = express.Router();
 
@@ -30,6 +31,9 @@ router.use("/gallery", galleryRoutes);
 
 // Mount illustration routes
 router.use("/illustrations", illustrationRoutes);
+
+// Mount credit routes
+router.use("/credits", creditRoutes);
 
 // Mount webhook routes
 router.use("/webhook", webhookRoutes);
