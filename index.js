@@ -40,9 +40,19 @@ if (DEBUG_MODE) {
   app.use(morgan("common"));
 }
 
+// CORS configuration - allow multiple origins in production
+const corsOrigins = DEBUG_MODE
+  ? [WEB_URL]
+  : [
+      "https://pettales.ai",
+      "https://www.pettales.ai",
+      "https://staging.pettales.ai",
+      WEB_URL, // Include the configured WEB_URL as well
+    ].filter(Boolean); // Remove any undefined values
+
 app.use(
   cors({
-    origin: [WEB_URL],
+    origin: corsOrigins,
     credentials: true, // Allow cookies
   })
 );

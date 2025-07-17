@@ -95,7 +95,16 @@ const COOKIE_OPTIONS = {
   sameSite: "lax",
   path: "/",
   maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-  domain: DEBUG_MODE ? "127.0.0.1" : undefined, // Share cookies across ports in development
+  domain: DEBUG_MODE ? "127.0.0.1" : ".pettales.ai", // Share cookies across subdomains in production
+};
+
+// Cookie clear options (without maxAge for clearing)
+const COOKIE_CLEAR_OPTIONS = {
+  httpOnly: true,
+  secure: !DEBUG_MODE,
+  sameSite: "lax",
+  path: "/",
+  domain: DEBUG_MODE ? "127.0.0.1" : ".pettales.ai",
 };
 
 // Validation
@@ -210,6 +219,7 @@ module.exports = {
 
   // Cookie Configuration
   COOKIE_OPTIONS,
+  COOKIE_CLEAR_OPTIONS,
 
   // Validation functions
   validateRequiredEnvVars,

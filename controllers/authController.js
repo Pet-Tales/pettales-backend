@@ -6,6 +6,7 @@ const logger = require("../utils/logger");
 const {
   DEFAULT_CREDITS_BALANCE,
   COOKIE_OPTIONS,
+  COOKIE_CLEAR_OPTIONS,
   WEB_URL,
 } = require("../utils/constants");
 const {
@@ -198,8 +199,8 @@ const logout = async (req, res) => {
       await Session.deleteOne({ session_token: sessionToken });
     }
 
-    // Clear session cookie
-    res.clearCookie("session_token");
+    // Clear session cookie with same options as when it was set
+    res.clearCookie("session_token", COOKIE_CLEAR_OPTIONS);
 
     res.json({
       success: true,
@@ -471,9 +472,13 @@ const googleCallback = async (req, res) => {
     // Check for stored redirect parameter from cookie
     const redirectPath = req.cookies.oauth_redirect;
 
-    // Clear the redirect cookie
+    // Clear the redirect cookie with same options as when it was set
     if (redirectPath) {
-      res.clearCookie("oauth_redirect");
+      res.clearCookie("oauth_redirect", {
+        httpOnly: true,
+        secure: !require("../utils/constants").DEBUG_MODE,
+        sameSite: "lax",
+      });
     }
 
     // Redirect to frontend
