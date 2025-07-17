@@ -61,6 +61,9 @@ const ILLUST_DISNEY =
 const ILLUST_VECTOR_ART =
   process.env.ILLUST_VECTOR_ART ||
   "https://storage-staging.pettales.ai/_static/illustration_styles/illust_vector_art_9.jpg";
+const ILLUST_CLASSIC_WATERCOLOR =
+  process.env.ILLUST_CLASSIC_WATERCOLOR ||
+  "https://storage-staging.pettales.ai/_static/illustration_styles/illust_classic_watercolor_1.jpg";
 
 // Application Constants
 const DEFAULT_CREDITS_BALANCE = 10;
@@ -191,6 +194,7 @@ module.exports = {
   ILLUST_ANIME,
   ILLUST_DISNEY,
   ILLUST_VECTOR_ART,
+  ILLUST_CLASSIC_WATERCOLOR,
 
   // Application Constants
   DEFAULT_CREDITS_BALANCE,

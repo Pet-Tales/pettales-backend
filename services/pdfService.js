@@ -25,6 +25,56 @@ class ChildrenBookPDF {
     this.pageWidth = this.doc.page.width;
     this.pageHeight = this.doc.page.height;
     this.storyPageNumber = 1; // For story page numbering (starts from first story page)
+
+    // Register Patrick Hand font
+    this.registerPatrickHandFont();
+  }
+
+  // Register Patrick Hand font
+  registerPatrickHandFont() {
+    try {
+      const fontPath = path.join(
+        __dirname,
+        "..",
+        "assets",
+        "fonts",
+        "PatrickHand-Regular.ttf"
+      );
+      if (fs.existsSync(fontPath)) {
+        this.doc.registerFont("PatrickHand", fontPath);
+        logger.info("Patrick Hand font registered successfully");
+      } else {
+        logger.warn(
+          `Patrick Hand font not found at: ${fontPath}, falling back to Helvetica`
+        );
+      }
+    } catch (error) {
+      logger.error("Error registering Patrick Hand font:", error.message);
+    }
+  }
+
+  // Get the appropriate font name (Patrick Hand if available, otherwise Helvetica)
+  getFont(style = "regular") {
+    const fontPath = path.join(
+      __dirname,
+      "..",
+      "assets",
+      "fonts",
+      "PatrickHand-Regular.ttf"
+    );
+    if (fs.existsSync(fontPath)) {
+      return "PatrickHand"; // Patrick Hand doesn't have separate bold/italic variants
+    }
+
+    // Fallback to Helvetica variants
+    switch (style) {
+      case "bold":
+        return "Helvetica-Bold";
+      case "italic":
+        return "Helvetica-Oblique";
+      default:
+        return "Helvetica";
+    }
   }
 
   // Create the children's book from JSON data
@@ -180,6 +230,7 @@ class ChildrenBookPDF {
     // Add placeholder text
     this.doc
       .fontSize(24)
+      .font(this.getFont())
       .fillColor("#999")
       .text("Image Not Found", x, y + rectHeight / 2 - 12, {
         width: rectWidth,
@@ -192,7 +243,7 @@ class ChildrenBookPDF {
     // Add main text with center alignment
     this.doc
       .fontSize(16)
-      .font("Helvetica")
+      .font(this.getFont())
       .fillColor("#333")
       .text(text, 50, 150, {
         width: this.pageWidth - 100,
@@ -225,7 +276,7 @@ class ChildrenBookPDF {
 
         this.doc
           .fontSize(24)
-          .font("Helvetica-Bold")
+          .font(this.getFont("bold"))
           .fillColor("#333")
           .text(title, 50, this.pageHeight / 2, {
             width: this.pageWidth - 100,
@@ -237,7 +288,7 @@ class ChildrenBookPDF {
       // Fallback: simple text on white background
       this.doc
         .fontSize(24)
-        .font("Helvetica-Bold")
+        .font(this.getFont("bold"))
         .fillColor("#333")
         .text(title, 50, this.pageHeight / 2, {
           width: this.pageWidth - 100,
@@ -287,7 +338,7 @@ Printed with pawsitivity in the UK`;
 
         this.doc
           .fontSize(14)
-          .font("Helvetica")
+          .font(this.getFont())
           .fillColor("#0f5636")
           .text(copyrightText, 50, textStartY, {
             width: this.pageWidth - 100,
@@ -305,7 +356,7 @@ Printed with pawsitivity in the UK`;
 
         this.doc
           .fontSize(14)
-          .font("Helvetica")
+          .font(this.getFont())
           .fillColor("#0f5636")
           .text(copyrightText, 50, this.pageHeight / 2 - 40, {
             width: this.pageWidth - 100,
@@ -324,7 +375,7 @@ Printed with pawsitivity in the UK`;
 
       this.doc
         .fontSize(14)
-        .font("Helvetica")
+        .font(this.getFont())
         .fillColor("#0f5636")
         .text(copyrightText, 50, this.pageHeight / 2 - 40, {
           width: this.pageWidth - 100,
@@ -341,7 +392,7 @@ Printed with pawsitivity in the UK`;
     if (dedication && dedication.trim()) {
       this.doc
         .fontSize(18)
-        .font("Helvetica-Oblique")
+        .font(this.getFont("italic"))
         .fillColor("#333")
         .text(dedication, 50, this.pageHeight / 2 - 50, {
           width: this.pageWidth - 100,
@@ -376,7 +427,7 @@ Printed with pawsitivity in the UK`;
         // Add moral text directly without background - white text, larger size, more padding
         this.doc
           .fontSize(20)
-          .font("Helvetica")
+          .font(this.getFont())
           .fillColor("#ffffff")
           .text(moral, 80, moralY, {
             width: this.pageWidth - 160,
@@ -390,7 +441,7 @@ Printed with pawsitivity in the UK`;
       if (moral && moral.trim()) {
         this.doc
           .fontSize(20)
-          .font("Helvetica")
+          .font(this.getFont())
           .fillColor("#333")
           .text(moral, 80, this.pageHeight / 2, {
             width: this.pageWidth - 160,
@@ -405,6 +456,7 @@ Printed with pawsitivity in the UK`;
   addStoryPageNumber() {
     this.doc
       .fontSize(12)
+      .font(this.getFont())
       .fillColor("#666")
       .text(`- ${this.storyPageNumber} -`, 0, this.pageHeight - 30, {
         width: this.pageWidth,

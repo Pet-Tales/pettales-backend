@@ -9,6 +9,7 @@ const {
   ILLUST_ANIME,
   ILLUST_DISNEY,
   ILLUST_VECTOR_ART,
+  ILLUST_CLASSIC_WATERCOLOR,
 } = require("../utils/constants");
 
 /**
@@ -148,6 +149,8 @@ class IllustrationService {
         inputImages.push(ILLUST_DISNEY);
       } else if (book.illustration_style === "vector_art") {
         inputImages.push(ILLUST_VECTOR_ART);
+      } else if (book.illustration_style === "classic_watercolor") {
+        inputImages.push(ILLUST_CLASSIC_WATERCOLOR);
       }
 
       // Use the original front cover prompt from the database if available
@@ -262,6 +265,8 @@ class IllustrationService {
         inputImages.push(ILLUST_DISNEY);
       } else if (book.illustration_style === "vector_art") {
         inputImages.push(ILLUST_VECTOR_ART);
+      } else if (book.illustration_style === "classic_watercolor") {
+        inputImages.push(ILLUST_CLASSIC_WATERCOLOR);
       }
 
       // Use the original back cover prompt from the database if available
@@ -389,6 +394,8 @@ class IllustrationService {
         inputImages.push(ILLUST_DISNEY);
       } else if (book.illustration_style === "vector_art") {
         inputImages.push(ILLUST_VECTOR_ART);
+      } else if (book.illustration_style === "classic_watercolor") {
+        inputImages.push(ILLUST_CLASSIC_WATERCOLOR);
       }
 
       // Use the existing illustration prompt from the page

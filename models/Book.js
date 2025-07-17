@@ -46,7 +46,7 @@ const bookSchema = new mongoose.Schema(
     illustration_style: {
       type: String,
       required: true,
-      enum: ["anime", "disney", "vector_art"],
+      enum: ["anime", "disney", "vector_art", "classic_watercolor"],
     },
     character_ids: {
       type: [mongoose.Schema.Types.ObjectId],

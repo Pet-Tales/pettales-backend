@@ -44,9 +44,9 @@ const createBookValidation = [
       return true;
     }),
   body("illustration_style")
-    .isIn(["anime", "disney", "vector_art"])
+    .isIn(["anime", "disney", "vector_art", "classic_watercolor"])
     .withMessage(
-      "Illustration style must be 'anime', 'disney', or 'vector_art'"
+      "Illustration style must be 'anime', 'disney', 'vector_art', or 'classic_watercolor'"
     ),
   body("character_ids")
     .isArray({ min: 1, max: 3 })

@@ -39,19 +39,26 @@ const characterSchema = new mongoose.Schema(
     },
     gender: {
       type: String,
-      enum: ["boy", "girl"],
-      required: function () {
-        return this.character_type === "human";
-      },
+      enum: ["boy", "girl", "male", "female"],
+      required: true, // Now required for both human and pet characters
       validate: {
         validator: function (value) {
-          // Only validate if this is a human character
+          // Validate based on character type
           if (this.character_type === "human") {
-            return value != null;
+            return value != null && ["boy", "girl"].includes(value);
+          }
+          // For pet characters, gender is now required and must be valid
+          if (this.character_type === "pet") {
+            return value != null && ["male", "female"].includes(value);
           }
           return true;
         },
-        message: "Gender is required for human characters",
+        message: function (props) {
+          if (this.character_type === "human") {
+            return "Gender is required for human characters and must be 'boy' or 'girl'";
+          }
+          return "Gender is required for pet characters and must be 'male' or 'female'";
+        },
       },
     },
     ethnicity: {
@@ -161,9 +168,8 @@ characterSchema.pre("save", function (next) {
     this.ears = null;
     this.tail = null;
   } else if (this.character_type === "pet") {
-    // Clear human-specific fields for pet characters
+    // Clear human-specific fields for pet characters (except gender which is now shared)
     this.age = null;
-    this.gender = null;
     this.ethnicity = null;
     this.hair_color = null;
     this.eye_color = null;

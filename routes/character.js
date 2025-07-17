@@ -20,10 +20,6 @@ const humanCharacterValidation = [
     .if(body("character_type").equals("human"))
     .isInt({ min: 0 })
     .withMessage("Age must be a positive number for human characters"),
-  body("gender")
-    .if(body("character_type").equals("human"))
-    .isIn(["boy", "girl"])
-    .withMessage("Gender must be either 'boy' or 'girl' for human characters"),
   body("ethnicity")
     .if(body("character_type").equals("human"))
     .notEmpty()
@@ -49,6 +45,27 @@ const petCharacterValidation = [
   body("tail").optional().trim(),
 ];
 
+const genderValidation = body("gender")
+  .notEmpty()
+  .withMessage("Gender is required")
+  .custom((value, { req }) => {
+    const characterType = req.body.character_type;
+    if (characterType === "human") {
+      if (!["boy", "girl"].includes(value)) {
+        throw new Error(
+          "Gender must be either 'boy' or 'girl' for human characters"
+        );
+      }
+    } else if (characterType === "pet") {
+      if (!["male", "female"].includes(value)) {
+        throw new Error(
+          "Gender must be either 'male' or 'female' for pet characters"
+        );
+      }
+    }
+    return true;
+  });
+
 const personalityValidation = body("personality").optional().trim();
 
 const createCharacterValidation = [
@@ -56,6 +73,7 @@ const createCharacterValidation = [
   characterTypeValidation,
   ...humanCharacterValidation,
   ...petCharacterValidation,
+  genderValidation,
   personalityValidation,
 ];
 
@@ -71,6 +89,7 @@ const updateCharacterValidation = [
     .withMessage("Character type must be either 'human' or 'pet'"),
   ...humanCharacterValidation,
   ...petCharacterValidation,
+  genderValidation,
   personalityValidation,
 ];
 
