@@ -88,6 +88,11 @@ const FREE_REGENERATION_LIMITS = {
 const CREDIT_VALUE_USD = 0.01; // 1 credit = $0.01
 const LOW_CREDIT_THRESHOLD = 100;
 
+// Determine if we're in local development (not staging or production)
+const IS_LOCAL_DEV =
+  DEBUG_MODE &&
+  (WEB_URL.includes("127.0.0.1") || WEB_URL.includes("localhost"));
+
 // Cookie Configuration
 const COOKIE_OPTIONS = {
   httpOnly: true,
@@ -95,8 +100,8 @@ const COOKIE_OPTIONS = {
   sameSite: "lax",
   path: "/",
   maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-  // Don't set domain in production to allow cookies to work on exact domain
-  ...(DEBUG_MODE ? { domain: "127.0.0.1" } : {}),
+  // Only set domain for local development, let staging/production use default domain
+  ...(IS_LOCAL_DEV ? { domain: "127.0.0.1" } : {}),
 };
 
 // Cookie clear options (without maxAge for clearing)
@@ -105,8 +110,8 @@ const COOKIE_CLEAR_OPTIONS = {
   secure: !DEBUG_MODE,
   sameSite: "lax",
   path: "/",
-  // Don't set domain in production to allow cookies to work on exact domain
-  ...(DEBUG_MODE ? { domain: "127.0.0.1" } : {}),
+  // Only set domain for local development, let staging/production use default domain
+  ...(IS_LOCAL_DEV ? { domain: "127.0.0.1" } : {}),
 };
 
 // Validation
@@ -222,6 +227,7 @@ module.exports = {
   // Cookie Configuration
   COOKIE_OPTIONS,
   COOKIE_CLEAR_OPTIONS,
+  IS_LOCAL_DEV,
 
   // Validation functions
   validateRequiredEnvVars,

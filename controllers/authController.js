@@ -7,6 +7,7 @@ const {
   DEFAULT_CREDITS_BALANCE,
   COOKIE_OPTIONS,
   COOKIE_CLEAR_OPTIONS,
+  IS_LOCAL_DEV,
   WEB_URL,
 } = require("../utils/constants");
 const {
@@ -483,7 +484,7 @@ const googleCallback = async (req, res) => {
         httpOnly: true,
         secure: !DEBUG_MODE,
         sameSite: "lax",
-        ...(DEBUG_MODE ? { domain: "127.0.0.1" } : {}),
+        ...(IS_LOCAL_DEV ? { domain: "127.0.0.1" } : {}),
       });
     }
 
