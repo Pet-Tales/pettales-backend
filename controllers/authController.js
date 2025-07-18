@@ -158,7 +158,11 @@ const login = async (req, res) => {
       expires: sessionExpiry,
     };
 
-    logger.info("Setting session cookie with options:", cookieOptions);
+    logger.info("Setting session cookie with options:", {
+      ...cookieOptions,
+      sessionToken: sessionToken.substring(0, 10) + "...",
+      userEmail: user.email,
+    });
     res.cookie("session_token", sessionToken, cookieOptions);
 
     res.json({
@@ -474,10 +478,12 @@ const googleCallback = async (req, res) => {
 
     // Clear the redirect cookie with same options as when it was set
     if (redirectPath) {
+      const { DEBUG_MODE } = require("../utils/constants");
       res.clearCookie("oauth_redirect", {
         httpOnly: true,
-        secure: !require("../utils/constants").DEBUG_MODE,
+        secure: !DEBUG_MODE,
         sameSite: "lax",
+        ...(DEBUG_MODE ? { domain: "127.0.0.1" } : {}),
       });
     }
 

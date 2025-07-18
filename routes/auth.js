@@ -96,11 +96,13 @@ if (GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET) {
       const redirectPath = req.query.redirect;
       if (redirectPath) {
         // Store redirect in a temporary cookie that expires in 10 minutes
+        const { DEBUG_MODE } = require("../utils/constants");
         res.cookie("oauth_redirect", redirectPath, {
           httpOnly: true,
-          secure: !require("../utils/constants").DEBUG_MODE,
+          secure: !DEBUG_MODE,
           sameSite: "lax",
           maxAge: 10 * 60 * 1000, // 10 minutes
+          ...(DEBUG_MODE ? { domain: "127.0.0.1" } : {}),
         });
       }
       next();
