@@ -11,7 +11,11 @@ const authenticateUser = async (req, _res, next) => {
     const sessionToken = req.cookies.session_token;
 
     if (!sessionToken) {
-      logger.debug("Auth middleware - No session token found");
+      logger.debug("Auth middleware - No session token found", {
+        cookies: Object.keys(req.cookies),
+        url: req.url,
+        userAgent: req.get("User-Agent"),
+      });
       req.user = null;
       return next();
     }
@@ -23,7 +27,11 @@ const authenticateUser = async (req, _res, next) => {
     }).populate("user_id");
 
     if (!session || !session.user_id) {
-      logger.debug("Auth middleware - Invalid session or no user");
+      logger.debug("Auth middleware - Invalid session or no user", {
+        sessionFound: !!session,
+        sessionToken: sessionToken.substring(0, 10) + "...",
+        url: req.url,
+      });
       req.user = null;
       return next();
     }

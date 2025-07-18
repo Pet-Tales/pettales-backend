@@ -40,9 +40,19 @@ if (DEBUG_MODE) {
   app.use(morgan("common"));
 }
 
+// CORS configuration - allow multiple origins in production
+const corsOrigins = DEBUG_MODE
+  ? [WEB_URL]
+  : [
+      "https://pettales.ai",
+      "https://www.pettales.ai",
+      "https://staging.pettales.ai",
+      WEB_URL, // Include the configured WEB_URL as well
+    ].filter(Boolean); // Remove any undefined values
+
 app.use(
   cors({
-    origin: [WEB_URL],
+    origin: corsOrigins,
     credentials: true, // Allow cookies
   })
 );
@@ -62,6 +72,22 @@ app.get("/health", (req, res) => {
   logger.info(`Health check accessed from ${req.ip}`);
   res.send(message);
 });
+
+// Debug endpoint to check cookies (only in debug mode)
+if (DEBUG_MODE) {
+  app.get("/debug/cookies", (req, res) => {
+    res.json({
+      cookies: req.cookies,
+      headers: {
+        cookie: req.headers.cookie,
+        origin: req.headers.origin,
+        referer: req.headers.referer,
+        userAgent: req.headers["user-agent"],
+      },
+      user: req.user ? { id: req.user._id, email: req.user.email } : null,
+    });
+  });
+}
 
 // Error handling middleware
 app.use((err, _req, res, _next) => {
