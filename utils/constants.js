@@ -95,7 +95,8 @@ const COOKIE_OPTIONS = {
   sameSite: "lax",
   path: "/",
   maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-  domain: DEBUG_MODE ? "127.0.0.1" : "*.pettales.ai", // Share cookies across subdomains in production
+  // Don't set domain in production to allow cookies to work on exact domain
+  ...(DEBUG_MODE ? { domain: "127.0.0.1" } : {}),
 };
 
 // Cookie clear options (without maxAge for clearing)
@@ -104,7 +105,8 @@ const COOKIE_CLEAR_OPTIONS = {
   secure: !DEBUG_MODE,
   sameSite: "lax",
   path: "/",
-  domain: DEBUG_MODE ? "127.0.0.1" : "*.pettales.ai",
+  // Don't set domain in production to allow cookies to work on exact domain
+  ...(DEBUG_MODE ? { domain: "127.0.0.1" } : {}),
 };
 
 // Validation

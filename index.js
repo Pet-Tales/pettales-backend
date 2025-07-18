@@ -73,6 +73,22 @@ app.get("/health", (req, res) => {
   res.send(message);
 });
 
+// Debug endpoint to check cookies (only in debug mode)
+if (DEBUG_MODE) {
+  app.get("/debug/cookies", (req, res) => {
+    res.json({
+      cookies: req.cookies,
+      headers: {
+        cookie: req.headers.cookie,
+        origin: req.headers.origin,
+        referer: req.headers.referer,
+        userAgent: req.headers["user-agent"],
+      },
+      user: req.user ? { id: req.user._id, email: req.user.email } : null,
+    });
+  });
+}
+
 // Error handling middleware
 app.use((err, _req, res, _next) => {
   logger.error(`Unhandled error: ${err}`);
