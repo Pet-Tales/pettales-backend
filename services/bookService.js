@@ -327,12 +327,18 @@ class BookService {
         bookId,
         { is_public: !book.is_public },
         { new: true }
-      );
+      )
+        .populate("character_ids")
+        .populate("user_id", "first_name last_name");
 
       logger.info(
         `Book ${bookId} public status toggled to: ${updatedBook.is_public}`
       );
-      return updatedBook;
+
+      // Convert to JSON to apply field transformations
+      const bookJson = updatedBook.toJSON();
+
+      return bookJson;
     } catch (error) {
       logger.error(`Failed to toggle book public status ${bookId}:`, error);
       throw error;
