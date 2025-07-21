@@ -4,6 +4,8 @@ const BookService = require("../services/bookService");
 const { pdfRegenerationService } = require("../services/pdfService");
 const creditService = require("../services/creditService");
 const logger = require("../utils/logger");
+const https = require("https");
+const http = require("http");
 // const { useErrorTranslation } = require("../utils/errorMapper");
 
 const bookService = new BookService();
@@ -552,6 +554,120 @@ const checkPDFStatus = async (req, res) => {
   }
 };
 
+/**
+ * Download PDF for a book (proxy to handle CORS)
+ */
+const downloadPDF = async (req, res) => {
+  try {
+    // Check for validation errors
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        message: "Validation failed",
+        errors: errors.array(),
+      });
+    }
+
+    const { id } = req.params;
+    const userId = req.user ? req.user._id.toString() : null;
+
+    // Additional check for valid ObjectId format
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid book ID format",
+      });
+    }
+
+    // Get book and check access permissions
+    const book = await bookService.getBookById(id, userId);
+
+    if (!book.pdfUrl) {
+      return res.status(404).json({
+        success: false,
+        message: "PDF not available for this book",
+      });
+    }
+
+    logger.info(`User ${userId || "anonymous"} downloading PDF for book ${id}`);
+
+    // Stream the PDF from CloudFront/S3 to the client
+    const protocol = book.pdfUrl.startsWith("https:") ? https : http;
+
+    const request = protocol.get(book.pdfUrl, (response) => {
+      if (response.statusCode !== 200) {
+        logger.error(
+          `Failed to fetch PDF from ${book.pdfUrl}: ${response.statusCode}`
+        );
+        return res.status(404).json({
+          success: false,
+          message: "PDF file not found",
+        });
+      }
+
+      // Set appropriate headers for PDF download
+      const filename = `${book.title
+        .replace(/[^a-zA-Z0-9\s-_]/g, "")
+        .replace(/\s+/g, "_")}_${id}.pdf`;
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="${filename}"`
+      );
+      res.setHeader("Cache-Control", "no-cache");
+
+      // Pipe the PDF response to the client
+      response.pipe(res);
+    });
+
+    request.on("error", (error) => {
+      logger.error(`Error downloading PDF for book ${id}: ${error.message}`);
+      if (!res.headersSent) {
+        res.status(500).json({
+          success: false,
+          message: "Failed to download PDF",
+        });
+      }
+    });
+
+    request.setTimeout(30000, () => {
+      logger.error(`Timeout downloading PDF for book ${id}`);
+      if (!res.headersSent) {
+        res.status(504).json({
+          success: false,
+          message: "Download timeout",
+        });
+      }
+      request.destroy();
+    });
+  } catch (error) {
+    logger.error(`Download PDF error: ${error.message}`);
+
+    // Handle specific errors
+    if (error.message === "Book not found") {
+      return res.status(404).json({
+        success: false,
+        message: "Book not found",
+      });
+    }
+
+    if (error.message === "Access denied") {
+      return res.status(403).json({
+        success: false,
+        message: "Access denied",
+      });
+    }
+
+    if (!res.headersSent) {
+      res.status(500).json({
+        success: false,
+        message: "Failed to download PDF",
+      });
+    }
+  }
+};
+
 module.exports = {
   createBook,
   getUserBooks,
@@ -562,4 +678,5 @@ module.exports = {
   retryBookGeneration,
   regeneratePDF,
   checkPDFStatus,
+  downloadPDF,
 };
