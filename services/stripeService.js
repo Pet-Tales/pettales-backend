@@ -15,9 +15,15 @@ class StripeService {
    * @param {string} userId - User ID
    * @param {number} creditAmount - Number of credits to purchase
    * @param {string} userEmail - User email for prefilling
+   * @param {string} context - Purchase context ('pricing' or 'book-creation')
    * @returns {Promise<Object>} - Stripe checkout session
    */
-  async createCreditPurchaseSession(userId, creditAmount, userEmail) {
+  async createCreditPurchaseSession(
+    userId,
+    creditAmount,
+    userEmail,
+    context = "pricing"
+  ) {
     try {
       // Calculate price in cents (Stripe uses cents)
       const priceInCents = Math.round(creditAmount * CREDIT_VALUE_USD * 100);
@@ -25,8 +31,18 @@ class StripeService {
       logger.info(
         `Creating checkout session: ${creditAmount} credits = $${
           creditAmount * CREDIT_VALUE_USD
-        } = ${priceInCents} cents`
+        } = ${priceInCents} cents for context: ${context}`
       );
+
+      // Determine URLs based on context
+      let successUrl, cancelUrl;
+      if (context === "book-creation") {
+        successUrl = `${WEB_URL}/books/create?payment=success&session_id={CHECKOUT_SESSION_ID}`;
+        cancelUrl = `${WEB_URL}/books/create?payment=cancelled`;
+      } else {
+        successUrl = `${WEB_URL}/credits/success?session_id={CHECKOUT_SESSION_ID}`;
+        cancelUrl = `${WEB_URL}/pricing`;
+      }
 
       // Create checkout session
       const session = await stripeClient.checkout.sessions.create({
@@ -45,8 +61,8 @@ class StripeService {
           },
         ],
         mode: "payment",
-        success_url: `${WEB_URL}/credits/success?session_id={CHECKOUT_SESSION_ID}`,
-        cancel_url: `${WEB_URL}/pricing`,
+        success_url: successUrl,
+        cancel_url: cancelUrl,
         customer_email: userEmail,
         metadata: {
           user_id: userId,

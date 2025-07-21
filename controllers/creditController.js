@@ -21,7 +21,7 @@ const createPurchaseSession = async (req, res) => {
       });
     }
 
-    const { creditAmount } = req.body;
+    const { creditAmount, context } = req.body;
     const userId = req.user._id.toString();
     const userEmail = req.user.email;
 
@@ -37,7 +37,8 @@ const createPurchaseSession = async (req, res) => {
     const session = await stripeService.createCreditPurchaseSession(
       userId,
       creditAmount,
-      userEmail
+      userEmail,
+      context
     );
 
     logger.info(
