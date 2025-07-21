@@ -20,7 +20,7 @@ Lamentamos informarte que hubo un problema al generar tu libro infantil "${bookT
 Nuestro equipo ha sido notificado automáticamente y está trabajando para resolver este problema. Reintentaremos el proceso de generación y te notificaremos una vez que tu libro esté listo.
 
 Mientras tanto, puedes:
-- Revisar tu panel de control para actualizaciones: ${dashboardUrl}
+- Revisar tu página de libros para actualizaciones: ${dashboardUrl}
 - Intentar crear un nuevo libro con diferentes configuraciones
 - Contactar a nuestro equipo de soporte si necesitas asistencia inmediata: ${supportEmail}
 
@@ -51,13 +51,13 @@ El equipo de PetTalesAI
     
     <h3 style="color: #E9B80C; margin-top: 30px;">Mientras tanto, puedes:</h3>
     <ul style="padding-left: 20px;">
-      <li>Revisar tu panel de control para actualizaciones</li>
+      <li>Revisar tu página de libros para actualizaciones</li>
       <li>Intentar crear un nuevo libro con diferentes configuraciones</li>
       <li>Contactar a nuestro equipo de soporte si necesitas asistencia inmediata</li>
     </ul>
     
     <div style="text-align: center; margin: 30px 0;">
-      <a href="${dashboardUrl}" style="background-color: #E9B80C; color: white; padding: 12px 25px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block; margin-right: 10px;">Ver Panel de Control</a>
+      <a href="${dashboardUrl}" style="background-color: #E9B80C; color: white; padding: 12px 25px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block; margin-right: 10px;">Ver Mis Libros</a>
       <a href="mailto:${supportEmail}" style="background-color: #6c757d; color: white; padding: 12px 25px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block;">Contactar Soporte</a>
     </div>
     

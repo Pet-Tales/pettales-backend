@@ -19,7 +19,7 @@ Great news! Your personalized children's book "${bookTitle}" has been successful
 
 Download your book: ${pdfUrl}
 
-You can also view and manage all your books from your dashboard: ${dashboardUrl}
+You can also view and manage all your books: ${dashboardUrl}
 
 What's next?
 - Download and read your book
@@ -50,10 +50,10 @@ The PetTalesAI Team
       <a href="${pdfUrl}" style="background-color: #E9B80C; color: white; padding: 15px 30px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block; font-size: 16px;">📚 Download Your Book</a>
     </div>
     
-    <p>You can also view and manage all your books from your dashboard:</p>
-    
+    <p>You can also view and manage all your books:</p>
+
     <div style="text-align: center; margin: 20px 0;">
-      <a href="${dashboardUrl}" style="background-color: #6c757d; color: white; padding: 12px 25px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block;">View Dashboard</a>
+      <a href="${dashboardUrl}" style="background-color: #6c757d; color: white; padding: 12px 25px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block;">View My Books</a>
     </div>
     
     <h3 style="color: #E9B80C; margin-top: 30px;">What's next?</h3>

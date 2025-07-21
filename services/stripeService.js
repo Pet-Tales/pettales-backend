@@ -46,7 +46,7 @@ class StripeService {
         ],
         mode: "payment",
         success_url: `${WEB_URL}/credits/success?session_id={CHECKOUT_SESSION_ID}`,
-        cancel_url: `${WEB_URL}/credits/purchase`,
+        cancel_url: `${WEB_URL}/pricing`,
         customer_email: userEmail,
         metadata: {
           user_id: userId,

@@ -19,7 +19,7 @@ Hola ${firstName},
 
 Descarga tu libro: ${pdfUrl}
 
-También puedes ver y gestionar todos tus libros desde tu panel de control: ${dashboardUrl}
+También puedes ver y gestionar todos tus libros: ${dashboardUrl}
 
 ¿Qué sigue?
 - Descarga y lee tu libro
@@ -50,10 +50,10 @@ El equipo de PetTalesAI
       <a href="${pdfUrl}" style="background-color: #E9B80C; color: white; padding: 15px 30px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block; font-size: 16px;">📚 Descargar Tu Libro</a>
     </div>
     
-    <p>También puedes ver y gestionar todos tus libros desde tu panel de control:</p>
-    
+    <p>También puedes ver y gestionar todos tus libros:</p>
+
     <div style="text-align: center; margin: 20px 0;">
-      <a href="${dashboardUrl}" style="background-color: #6c757d; color: white; padding: 12px 25px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block;">Ver Panel de Control</a>
+      <a href="${dashboardUrl}" style="background-color: #6c757d; color: white; padding: 12px 25px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block;">Ver Mis Libros</a>
     </div>
     
     <h3 style="color: #E9B80C; margin-top: 30px;">¿Qué sigue?</h3>

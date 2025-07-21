@@ -158,11 +158,11 @@ const sendPasswordReset = async (
  * @param {string} language - User's preferred language (default: 'en')
  */
 const sendWelcomeEmail = async (email, firstName, language = "en") => {
-  const dashboardUrl = `${WEB_URL}/dashboard`;
+  const myBooksUrl = `${WEB_URL}/my-books`;
 
   const template = getEmailTemplate(language, "welcome", {
     firstName,
-    dashboardUrl,
+    dashboardUrl: myBooksUrl, // Keep parameter name for backward compatibility
   });
 
   return sendEmail(
@@ -240,13 +240,13 @@ const sendBookGenerationSuccess = async (
   pdfUrl,
   language = "en"
 ) => {
-  const dashboardUrl = `${WEB_URL}/dashboard`;
+  const myBooksUrl = `${WEB_URL}/my-books`;
 
   const template = getEmailTemplate(language, "bookGenerationSuccess", {
     firstName,
     bookTitle,
     pdfUrl,
-    dashboardUrl,
+    dashboardUrl: myBooksUrl, // Keep parameter name for backward compatibility
   });
 
   return sendEmail(
@@ -270,13 +270,13 @@ const sendBookGenerationFailure = async (
   bookTitle,
   language = "en"
 ) => {
-  const dashboardUrl = `${WEB_URL}/dashboard`;
+  const myBooksUrl = `${WEB_URL}/my-books`;
   const supportEmail = NO_REPLY_EMAIL_ADDRESS; // Use the same email for support contact
 
   const template = getEmailTemplate(language, "bookGenerationFailure", {
     firstName,
     bookTitle,
-    dashboardUrl,
+    dashboardUrl: myBooksUrl, // Keep parameter name for backward compatibility
     supportEmail,
   });
 
