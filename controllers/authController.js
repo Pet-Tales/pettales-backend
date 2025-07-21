@@ -492,7 +492,7 @@ const googleCallback = async (req, res) => {
     if (redirectPath) {
       res.redirect(`${WEB_URL}${redirectPath}`);
     } else {
-      res.redirect(`${WEB_URL}/dashboard`);
+      res.redirect(`${WEB_URL}/my-books`);
     }
   } catch (error) {
     logger.error(`Google callback error: ${error}`);
