@@ -20,7 +20,7 @@ We're sorry to inform you that there was an issue generating your children's boo
 Our team has been automatically notified and is working to resolve this issue. We'll retry the generation process and notify you once your book is ready.
 
 In the meantime, you can:
-- Check your dashboard for updates: ${dashboardUrl}
+- Check your books page for updates: ${dashboardUrl}
 - Try creating a new book with different settings
 - Contact our support team if you need immediate assistance: ${supportEmail}
 
@@ -51,13 +51,13 @@ The PetTalesAI Team
     
     <h3 style="color: #E9B80C; margin-top: 30px;">In the meantime, you can:</h3>
     <ul style="padding-left: 20px;">
-      <li>Check your dashboard for updates</li>
+      <li>Check your books page for updates</li>
       <li>Try creating a new book with different settings</li>
       <li>Contact our support team if you need immediate assistance</li>
     </ul>
     
     <div style="text-align: center; margin: 30px 0;">
-      <a href="${dashboardUrl}" style="background-color: #E9B80C; color: white; padding: 12px 25px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block; margin-right: 10px;">View Dashboard</a>
+      <a href="${dashboardUrl}" style="background-color: #E9B80C; color: white; padding: 12px 25px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block; margin-right: 10px;">View My Books</a>
       <a href="mailto:${supportEmail}" style="background-color: #6c757d; color: white; padding: 12px 25px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block;">Contact Support</a>
     </div>
     
