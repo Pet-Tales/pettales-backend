@@ -15,14 +15,16 @@ class StripeService {
    * @param {string} userId - User ID
    * @param {number} creditAmount - Number of credits to purchase
    * @param {string} userEmail - User email for prefilling
-   * @param {string} context - Purchase context ('pricing' or 'book-creation')
+   * @param {string} context - Purchase context ('pricing', 'book-creation', or 'pdf-download')
+   * @param {Object} metadata - Additional metadata for the session
    * @returns {Promise<Object>} - Stripe checkout session
    */
   async createCreditPurchaseSession(
     userId,
     creditAmount,
     userEmail,
-    context = "pricing"
+    context = "pricing",
+    metadata = {}
   ) {
     try {
       // Calculate price in cents (Stripe uses cents)
@@ -39,6 +41,12 @@ class StripeService {
       if (context === "book-creation") {
         successUrl = `${WEB_URL}/books/create?payment=success&session_id={CHECKOUT_SESSION_ID}`;
         cancelUrl = `${WEB_URL}/books/create?payment=cancelled`;
+      } else if (context === "pdf-download") {
+        // For PDF downloads, redirect back to the book page with download trigger
+        const bookId = metadata.bookId;
+        const returnUrl = metadata.returnUrl || `/books/${bookId}`;
+        successUrl = `${WEB_URL}${returnUrl}?payment=success&download=pdf&session_id={CHECKOUT_SESSION_ID}`;
+        cancelUrl = `${WEB_URL}${returnUrl}?payment=cancelled`;
       } else {
         successUrl = `${WEB_URL}/credits/success?session_id={CHECKOUT_SESSION_ID}`;
         cancelUrl = `${WEB_URL}/pricing`;
@@ -63,17 +71,23 @@ class StripeService {
         mode: "payment",
         success_url: successUrl,
         cancel_url: cancelUrl,
-        customer_email: userEmail,
+        ...(userEmail && { customer_email: userEmail }),
         metadata: {
           user_id: userId,
           credit_amount: creditAmount.toString(),
-          type: "credit_purchase",
+          type: context === "pdf-download" ? "pdf_download" : "credit_purchase",
+          context: context,
+          ...(metadata.bookId && { book_id: metadata.bookId }),
+          ...(metadata.returnUrl && { return_url: metadata.returnUrl }),
         },
         payment_intent_data: {
           metadata: {
             user_id: userId,
             credit_amount: creditAmount.toString(),
-            type: "credit_purchase",
+            type:
+              context === "pdf-download" ? "pdf_download" : "credit_purchase",
+            context: context,
+            ...(metadata.bookId && { book_id: metadata.bookId }),
           },
         },
       });
@@ -142,6 +156,42 @@ class StripeService {
     } catch (error) {
       logger.error(`Failed to create Stripe customer: ${error.message}`);
       throw new Error(`Customer creation failed: ${error.message}`);
+    }
+  }
+
+  /**
+   * Retrieve a checkout session by ID
+   * @param {string} sessionId - Stripe session ID
+   * @returns {Promise<Object>} - Stripe session object
+   */
+  async getCheckoutSession(sessionId) {
+    try {
+      const session = await stripeClient.checkout.sessions.retrieve(sessionId);
+      return session;
+    } catch (error) {
+      logger.error(`Failed to retrieve checkout session: ${error.message}`);
+      throw new Error("Session retrieval failed: " + error.message);
+    }
+  }
+
+  /**
+   * Check if a checkout session was completed successfully for PDF download
+   * @param {string} sessionId - Stripe session ID
+   * @param {string} bookId - Book ID to verify
+   * @returns {Promise<boolean>} - True if session was completed for this book
+   */
+  async isSessionCompletedForBook(sessionId, bookId) {
+    try {
+      const session = await this.getCheckoutSession(sessionId);
+
+      return (
+        session.payment_status === "paid" &&
+        session.metadata?.type === "pdf_download" &&
+        session.metadata?.book_id === bookId
+      );
+    } catch (error) {
+      logger.error(`Failed to verify session for book: ${error.message}`);
+      return false;
     }
   }
 
