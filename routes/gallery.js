@@ -1,6 +1,7 @@
 const express = require("express");
 const { param, query } = require("express-validator");
 const { galleryController } = require("../controllers");
+const { authenticateUser } = require("../middleware");
 
 const router = express.Router();
 
@@ -48,11 +49,7 @@ const featuredLimitValidation = [
 // Routes
 
 // Get all public books with pagination and search
-router.get(
-  "/",
-  paginationValidation,
-  galleryController.getPublicBooks
-);
+router.get("/", paginationValidation, galleryController.getPublicBooks);
 
 // Get featured public books
 router.get(
@@ -62,10 +59,7 @@ router.get(
 );
 
 // Get gallery statistics
-router.get(
-  "/stats",
-  galleryController.getGalleryStats
-);
+router.get("/stats", galleryController.getGalleryStats);
 
 // Get public books by language
 router.get(
@@ -78,6 +72,7 @@ router.get(
 // Get book template data for creating a new book
 router.get(
   "/template/:id",
+  authenticateUser,
   mongoIdValidation,
   galleryController.getBookForTemplate
 );

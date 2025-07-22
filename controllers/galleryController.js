@@ -60,6 +60,7 @@ const getBookForTemplate = async (req, res) => {
     }
 
     const { id } = req.params;
+    const userId = req.user ? req.user._id.toString() : null;
 
     // Additional check for valid ObjectId format
     if (!mongoose.Types.ObjectId.isValid(id)) {
@@ -69,7 +70,7 @@ const getBookForTemplate = async (req, res) => {
       });
     }
 
-    const templateData = await galleryService.getBookForTemplate(id);
+    const templateData = await galleryService.getBookForTemplate(id, userId);
 
     res.json({
       success: true,
@@ -80,10 +81,10 @@ const getBookForTemplate = async (req, res) => {
     logger.error(`Get book template error: ${error.message}`);
 
     // Handle specific errors
-    if (error.message === "Public book not found") {
+    if (error.message === "Book not found or access denied") {
       return res.status(404).json({
         success: false,
-        message: "Public book not found",
+        message: "Book not found or access denied",
       });
     }
 
@@ -154,7 +155,10 @@ const getPublicBooksByLanguage = async (req, res) => {
       sortOrder: req.query.sortOrder || "desc",
     };
 
-    const result = await galleryService.getPublicBooksByLanguage(language, options);
+    const result = await galleryService.getPublicBooksByLanguage(
+      language,
+      options
+    );
 
     res.json({
       success: true,
