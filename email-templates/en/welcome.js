@@ -22,7 +22,7 @@ Here's what you can do next:
 - Generate your first story
 - Explore our gallery for inspiration
 
-Visit your dashboard: ${dashboardUrl}
+Visit your books: ${dashboardUrl}
 
 If you have any questions, feel free to reach out to our support team.
 
@@ -54,7 +54,7 @@ The PetTalesAI Team
     </ul>
     
     <div style="text-align: center; margin: 30px 0;">
-      <a href="${dashboardUrl}" style="background-color: #E9B80C; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block;">Visit Your Dashboard</a>
+      <a href="${dashboardUrl}" style="background-color: #E9B80C; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block;">Visit Your Books</a>
     </div>
     
     <p>If you have any questions, feel free to reach out to our support team.</p>
@@ -68,7 +68,7 @@ The PetTalesAI Team
   </div>
 </body>
 </html>
-    `.trim()
+    `.trim(),
   };
 };
 

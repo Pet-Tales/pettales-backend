@@ -52,18 +52,31 @@ const handleStripeWebhook = async (req, res) => {
  */
 const handleCheckoutSessionCompleted = async (session) => {
   try {
-    // Check if this is a credit purchase
-    if (session.metadata?.type !== "credit_purchase") {
+    // Check if this is a credit purchase or PDF download
+    if (
+      session.metadata?.type !== "credit_purchase" &&
+      session.metadata?.type !== "pdf_download"
+    ) {
       logger.info(`Ignoring non-credit purchase session: ${session.id}`);
       return;
     }
 
     const userId = session.metadata.user_id;
     const creditAmount = parseInt(session.metadata.credit_amount);
+    const sessionType = session.metadata.type;
 
     if (!userId || !creditAmount) {
       logger.error(
         `Invalid session metadata: ${JSON.stringify(session.metadata)}`
+      );
+      return;
+    }
+
+    // For PDF downloads by guests, we don't need to add credits to any user account
+    // The payment success is handled by the frontend redirect
+    if (sessionType === "pdf_download" && userId.startsWith("guest_")) {
+      logger.info(
+        `PDF download payment completed for guest session: ${session.id}`
       );
       return;
     }
@@ -115,15 +128,20 @@ const handleCheckoutSessionCompleted = async (session) => {
  */
 const handlePaymentIntentSucceeded = async (paymentIntent) => {
   try {
-    // Check if this is a credit purchase
-    if (paymentIntent.metadata?.type !== "credit_purchase") {
+    // Check if this is a credit purchase or PDF download
+    if (
+      paymentIntent.metadata?.type !== "credit_purchase" &&
+      paymentIntent.metadata?.type !== "pdf_download"
+    ) {
       logger.info(
         `Ignoring non-credit purchase payment intent: ${paymentIntent.id}`
       );
       return;
     }
 
-    logger.info(`Payment intent succeeded: ${paymentIntent.id}`);
+    logger.info(
+      `Payment intent succeeded: ${paymentIntent.id} (type: ${paymentIntent.metadata?.type})`
+    );
     // Additional processing if needed
   } catch (error) {
     logger.error(`Error handling payment intent succeeded: ${error.message}`);

@@ -189,4 +189,7 @@ router.get(
   bookController.checkPDFStatus
 );
 
+// Download PDF for a book (handles CORS issues)
+router.get("/:id/download-pdf", mongoIdValidation, bookController.downloadPDF);
+
 module.exports = router;

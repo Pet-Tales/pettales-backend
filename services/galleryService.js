@@ -68,26 +68,37 @@ class GalleryService {
   }
 
   /**
-   * Get a public book for template usage
+   * Get a book for template usage (public books or user's own books)
    * @param {string} bookId - Book ID
+   * @param {string} userId - User ID (optional)
    * @returns {Promise<Object>} - Book template data
    */
-  async getBookForTemplate(bookId) {
+  async getBookForTemplate(bookId, userId = null) {
     try {
       if (!mongoose.Types.ObjectId.isValid(bookId)) {
         throw new Error("Invalid book ID format");
       }
 
-      const book = await Book.findOne({
+      // Build query to find either public books or user's own books
+      const query = {
         _id: bookId,
-        is_public: true,
         generation_status: "completed",
-      })
+      };
+
+      // If user is authenticated, allow access to their own books or public books
+      if (userId) {
+        query.$or = [{ is_public: true }, { user_id: userId }];
+      } else {
+        // If not authenticated, only allow public books
+        query.is_public = true;
+      }
+
+      const book = await Book.findOne(query)
         .populate("character_ids")
         .populate("user_id", "first_name last_name");
 
       if (!book) {
-        throw new Error("Public book not found");
+        throw new Error("Book not found or access denied");
       }
 
       // Convert book and characters to JSON to apply field transformations
