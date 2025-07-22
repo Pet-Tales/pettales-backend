@@ -19,7 +19,7 @@ const getTempDir = () => {
 class ChildrenBookPDF {
   constructor() {
     this.doc = new PDFDocument({
-      size: [720, 540],
+      size: [540, 540],
       margins: { top: 0, bottom: 0, left: 0, right: 0 },
     });
     this.pageWidth = this.doc.page.width;
@@ -145,7 +145,7 @@ class ChildrenBookPDF {
     });
   }
 
-  // Add full-page illustration (4:3 aspect ratio)
+  // Add full-page illustration (1:1 aspect ratio)
   addIllustrationPage(imagePath, addPageNumber = false) {
     try {
       // Check if image file exists
@@ -162,20 +162,20 @@ class ChildrenBookPDF {
       // Get image info
       const imageInfo = this.doc.openImage(imagePath);
 
-      // Calculate dimensions to fill page while maintaining 4:3 aspect ratio
-      const targetAspectRatio = 4 / 3;
+      // Calculate dimensions to fill page while maintaining 1:1 aspect ratio
+      const targetAspectRatio = 1 / 1;
       const pageAspectRatio = this.pageWidth / this.pageHeight;
 
       let imageWidth, imageHeight, x, y;
 
       if (pageAspectRatio > targetAspectRatio) {
-        // Page is wider than 4:3, fit to height
+        // Page is wider than 1:1, fit to height
         imageHeight = this.pageHeight;
         imageWidth = imageHeight * targetAspectRatio;
         x = (this.pageWidth - imageWidth) / 2;
         y = 0;
       } else {
-        // Page is taller than 4:3, fit to width
+        // Page is taller than 1:1, fit to width
         imageWidth = this.pageWidth;
         imageHeight = imageWidth / targetAspectRatio;
         x = 0;
@@ -201,8 +201,8 @@ class ChildrenBookPDF {
 
   // Add placeholder when image is not available
   addImagePlaceholder() {
-    // Calculate 4:3 rectangle centered on page
-    const targetAspectRatio = 4 / 3;
+    // Calculate 1:1 rectangle centered on page
+    const targetAspectRatio = 1 / 1;
     const pageAspectRatio = this.pageWidth / this.pageHeight;
 
     let rectWidth, rectHeight, x, y;
