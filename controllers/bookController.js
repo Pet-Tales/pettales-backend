@@ -3,7 +3,11 @@ const mongoose = require("mongoose");
 const BookService = require("../services/bookService");
 const { pdfRegenerationService } = require("../services/pdfService");
 const creditService = require("../services/creditService");
+const stripeService = require("../services/stripeService");
 const logger = require("../utils/logger");
+const https = require("https");
+const http = require("http");
+const { CREDIT_COSTS } = require("../utils/constants");
 // const { useErrorTranslation } = require("../utils/errorMapper");
 
 const bookService = new BookService();
@@ -552,6 +556,247 @@ const checkPDFStatus = async (req, res) => {
   }
 };
 
+/**
+ * Download PDF for a book (proxy to handle CORS)
+ */
+const downloadPDF = async (req, res) => {
+  try {
+    // Check for validation errors
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        message: "Validation failed",
+        errors: errors.array(),
+      });
+    }
+
+    const { id } = req.params;
+    const userId = req.user ? req.user._id.toString() : null;
+
+    // Additional check for valid ObjectId format
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid book ID format",
+      });
+    }
+
+    // Get book and check access permissions
+    const book = await bookService.getBookById(id, userId);
+
+    if (!book.pdfUrl) {
+      return res.status(404).json({
+        success: false,
+        message: "PDF not available for this book",
+      });
+    }
+
+    // Check if user is the book owner (free download)
+    const isOwner = userId && book.isOwner;
+
+    if (isOwner) {
+      // Book owner gets free download
+      logger.info(`Book owner ${userId} downloading PDF for book ${id}`);
+      return streamPDFToClient(book, id, res);
+    }
+
+    // For non-owners downloading public books, payment is required
+    if (!book.isPublic) {
+      return res.status(403).json({
+        success: false,
+        message: "Access denied",
+      });
+    }
+
+    // Guest user - check for valid session or redirect to Stripe checkout
+    if (!userId) {
+      // Check if guest user has a valid session ID (from successful payment)
+      const sessionId = req.query.session_id;
+
+      if (sessionId) {
+        try {
+          const isValidSession = await stripeService.isSessionCompletedForBook(
+            sessionId,
+            id
+          );
+
+          if (isValidSession) {
+            logger.info(
+              `Guest user with valid session ${sessionId} downloading PDF for book ${id}`
+            );
+            return streamPDFToClient(book, id, res);
+          } else {
+            logger.warn(
+              `Guest user provided invalid session ${sessionId} for book ${id}`
+            );
+          }
+        } catch (sessionError) {
+          logger.error(
+            `Error verifying session for guest: ${sessionError.message}`
+          );
+        }
+      }
+
+      logger.info(
+        `Guest user requesting PDF download for book ${id}, redirecting to payment`
+      );
+
+      // Create a temporary user identifier for the session
+      const guestId = `guest_${Date.now()}_${Math.random()
+        .toString(36)
+        .substr(2, 9)}`;
+
+      try {
+        const session = await stripeService.createCreditPurchaseSession(
+          guestId,
+          CREDIT_COSTS.PDF_DOWNLOAD,
+          null, // No email for guest
+          "pdf-download",
+          {
+            bookId: id,
+            returnUrl: `/books/${id}`,
+          }
+        );
+
+        return res.json({
+          success: true,
+          requiresPayment: true,
+          isGuest: true,
+          checkoutUrl: session.url,
+          message: "Payment required for PDF download",
+        });
+      } catch (stripeError) {
+        logger.error(
+          `Failed to create checkout session for guest: ${stripeError.message}`
+        );
+        return res.status(500).json({
+          success: false,
+          message: "Failed to create payment session",
+        });
+      }
+    }
+
+    // Authenticated user - check credits and deduct
+    const user = req.user;
+    if (user.credits_balance < CREDIT_COSTS.PDF_DOWNLOAD) {
+      logger.info(
+        `User ${userId} has insufficient credits for PDF download (${user.credits_balance} < ${CREDIT_COSTS.PDF_DOWNLOAD})`
+      );
+      return res.status(402).json({
+        success: false,
+        message: "Insufficient credits for PDF download",
+        error: "INSUFFICIENT_CREDITS",
+        data: {
+          required: CREDIT_COSTS.PDF_DOWNLOAD,
+          available: user.credits_balance,
+          shortfall: CREDIT_COSTS.PDF_DOWNLOAD - user.credits_balance,
+        },
+      });
+    }
+
+    // Deduct credits and proceed with download
+    try {
+      await creditService.deductCredits(
+        userId,
+        CREDIT_COSTS.PDF_DOWNLOAD,
+        `PDF download for book: ${book.title}`,
+        { bookId: id }
+      );
+
+      logger.info(
+        `User ${userId} paid ${CREDIT_COSTS.PDF_DOWNLOAD} credits for PDF download of book ${id}`
+      );
+
+      // Stream the PDF
+      return streamPDFToClient(book, id, res);
+    } catch (creditError) {
+      logger.error(
+        `Failed to deduct credits for user ${userId}: ${creditError.message}`
+      );
+      return res.status(500).json({
+        success: false,
+        message: "Failed to process payment",
+      });
+    }
+  } catch (error) {
+    logger.error(`Download PDF error: ${error.message}`);
+
+    // Handle specific errors
+    if (error.message === "Book not found") {
+      return res.status(404).json({
+        success: false,
+        message: "Book not found",
+      });
+    }
+
+    if (error.message === "Access denied") {
+      return res.status(403).json({
+        success: false,
+        message: "Access denied",
+      });
+    }
+
+    if (!res.headersSent) {
+      res.status(500).json({
+        success: false,
+        message: "Failed to download PDF",
+      });
+    }
+  }
+};
+
+/**
+ * Helper function to stream PDF to client
+ */
+const streamPDFToClient = (book, bookId, res) => {
+  const protocol = book.pdfUrl.startsWith("https:") ? https : http;
+
+  const request = protocol.get(book.pdfUrl, (response) => {
+    if (response.statusCode !== 200) {
+      logger.error(
+        `Failed to fetch PDF from ${book.pdfUrl}: ${response.statusCode}`
+      );
+      return res.status(404).json({
+        success: false,
+        message: "PDF file not found",
+      });
+    }
+
+    // Set appropriate headers for PDF download
+    const filename = `${book.title
+      .replace(/[^a-zA-Z0-9\s-_]/g, "")
+      .replace(/\s+/g, "_")}_${bookId}.pdf`;
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    res.setHeader("Cache-Control", "no-cache");
+
+    // Pipe the PDF response to the client
+    response.pipe(res);
+  });
+
+  request.on("error", (error) => {
+    logger.error(`Error streaming PDF for book ${bookId}: ${error.message}`);
+    if (!res.headersSent) {
+      res.status(500).json({
+        success: false,
+        message: "Failed to download PDF",
+      });
+    }
+  });
+
+  request.setTimeout(30000, () => {
+    logger.error(`Timeout streaming PDF for book ${bookId}`);
+    if (!res.headersSent) {
+      res.status(504).json({
+        success: false,
+        message: "Download timeout",
+      });
+    }
+    request.destroy();
+  });
+};
+
 module.exports = {
   createBook,
   getUserBooks,
@@ -562,4 +807,5 @@ module.exports = {
   retryBookGeneration,
   regeneratePDF,
   checkPDFStatus,
+  downloadPDF,
 };

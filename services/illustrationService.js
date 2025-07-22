@@ -37,7 +37,7 @@ class IllustrationService {
   async generateIllustration(prompt, inputImages, seed, localImagePath) {
     const input = {
       prompt,
-      aspect_ratio: "4:3",
+      aspect_ratio: "1:1",
       seed,
       input_images: inputImages,
       output_format: "jpg",
