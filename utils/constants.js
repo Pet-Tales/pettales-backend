@@ -51,6 +51,18 @@ const AWS_LAMBDA_FUNCTION_NAME = process.env.AWS_LAMBDA_FUNCTION_NAME;
 // Replicate Configuration
 const REPLICATE_API_TOKEN = process.env.REPLICATE_API_TOKEN;
 
+// Lulu API Configuration
+const LULU_CLIENT_KEY = process.env.LULU_CLIENT_KEY;
+const LULU_CLIENT_SECRET = process.env.LULU_CLIENT_SECRET;
+const LULU_API_BASE_URL =
+  process.env.LULU_API_BASE_URL || "https://api.lulu.com";
+const LULU_SANDBOX_API_BASE_URL =
+  process.env.LULU_SANDBOX_API_BASE_URL || "https://api.sandbox.lulu.com";
+const LULU_ENVIRONMENT = process.env.LULU_ENVIRONMENT || "sandbox";
+const LULU_POD_PACKAGE_ID =
+  process.env.LULU_POD_PACKAGE_ID || "0750X0750FCPRESS080CW444MXX";
+const LULU_WEBHOOK_SECRET = process.env.LULU_WEBHOOK_SECRET;
+
 // Illustration Styles
 const ILLUST_ANIME =
   process.env.ILLUST_ANIME ||
@@ -206,6 +218,15 @@ module.exports = {
 
   // Replicate
   REPLICATE_API_TOKEN,
+
+  // Lulu API
+  LULU_CLIENT_KEY,
+  LULU_CLIENT_SECRET,
+  LULU_API_BASE_URL,
+  LULU_SANDBOX_API_BASE_URL,
+  LULU_ENVIRONMENT,
+  LULU_POD_PACKAGE_ID,
+  LULU_WEBHOOK_SECRET,
 
   // Illustration Styles
   ILLUST_ANIME,

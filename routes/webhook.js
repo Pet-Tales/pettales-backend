@@ -5,6 +5,7 @@ const {
   handleStripeWebhook,
 } = require("../controllers/stripeWebhookController");
 const { webhookRateLimit } = require("../middleware");
+const luluWebhookRoutes = require("./luluWebhook");
 
 const router = express.Router();
 
@@ -41,5 +42,8 @@ router.post(
   webhookRateLimit,
   handleStripeWebhook
 );
+
+// Lulu webhook endpoints
+router.use("/lulu", luluWebhookRoutes);
 
 module.exports = router;
