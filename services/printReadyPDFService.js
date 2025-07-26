@@ -9,18 +9,24 @@ const { S3_BUCKET_NAME } = require("../utils/constants");
 
 class PrintReadyPDFService {
   constructor() {
-    // 7.5" x 7.5" at 300 DPI (TRIM SIZE - what Lulu expects)
-    this.trimWidth = 7.5 * 300; // 2250 pixels
-    this.trimHeight = 7.5 * 300; // 2250 pixels
-    this.dpi = 300;
+    // 7.5" x 7.5" at 72 DPI (TRIM SIZE)
+    this.trimWidth = 7.5 * 72; // 540 pixels
+    this.trimHeight = 7.5 * 72; // 540 pixels
+    this.dpi = 72;
 
-    // For internal processing, we can still use bleed for better image quality
-    this.bleed = 0.125 * 300; // 37.5 pixels
-    this.processWidth = this.trimWidth + this.bleed * 2; // 2325 pixels (for image processing)
-    this.processHeight = this.trimHeight + this.bleed * 2; // 2325 pixels (for image processing)
+    // Bleed margin (0.125" on all sides)
+    this.bleed = 0.125 * 72; // 9 pixels
+
+    // Interior PDF dimensions with bleed: 7.75" x 7.75"
+    this.interiorPdfWidth = this.trimWidth + this.bleed * 2; // 558 pixels (7.75")
+    this.interiorPdfHeight = this.trimHeight + this.bleed * 2; // 558 pixels (7.75")
+
+    // Cover PDF dimensions with bleed: 15.25" x 7.75"
+    // Cover includes front + back + bleed on all sides
+    this.coverPdfHeight = this.trimHeight + this.bleed * 2; // 558 pixels (7.75")
 
     // Safe area (0.25" margin from trim)
-    this.safeMargin = 0.25 * 300; // 75 pixels
+    this.safeMargin = 0.25 * 72; // 18 pixels
   }
 
   /**
@@ -94,23 +100,24 @@ class PrintReadyPDFService {
         `cover-${book._id}-${Date.now()}.pdf`
       );
 
-      // Calculate spine width based on page count
-      // Assuming 80# coated paper (~0.004" per sheet)
-      const spineWidth = Math.max(pages.length * 0.004 * 300, 0.0625 * 300); // Minimum 0.0625" spine
-
-      // Total cover width = front + spine + back (TRIM SIZE for Lulu)
-      const coverWidth = this.trimWidth * 2 + spineWidth;
-      const coverHeight = this.trimHeight;
+      // For saddle stitch binding, no spine width needed
+      // Total cover width with bleed = front + back + bleed on left and right
+      // 15.25" = 7.5" (front) + 7.5" (back) + 0.125" (left bleed) + 0.125" (right bleed)
+      const coverPdfWidth = this.trimWidth * 2 + this.bleed * 2; // 1098 pixels (15.25" at 72 DPI)
+      const coverPdfHeight = this.coverPdfHeight; // 558 pixels (7.75" at 72 DPI)
 
       const doc = new PDFDocument({
-        size: [coverWidth, coverHeight],
+        size: [coverPdfWidth, coverPdfHeight],
         margins: { top: 0, bottom: 0, left: 0, right: 0 },
       });
 
       const stream = fs.createWriteStream(coverPdfPath);
       doc.pipe(stream);
 
-      // Process and add front cover
+      // Fill entire PDF with white background (including bleed areas)
+      doc.rect(0, 0, coverPdfWidth, coverPdfHeight).fill("#ffffff");
+
+      // Process and add front cover (positioned with bleed offset)
       if (book.front_cover_image_url) {
         const frontCoverBuffer = await this.processImageForPrint(
           book.front_cover_image_url,
@@ -118,15 +125,16 @@ class PrintReadyPDFService {
           this.trimHeight
         );
 
-        // Place front cover on the right side
-        const frontCoverX = this.trimWidth + spineWidth;
-        doc.image(frontCoverBuffer, frontCoverX, 0, {
+        // Place front cover on the right side (accounting for left bleed + back cover)
+        const frontCoverX = this.bleed + this.trimWidth;
+        const frontCoverY = this.bleed;
+        doc.image(frontCoverBuffer, frontCoverX, frontCoverY, {
           width: this.trimWidth,
           height: this.trimHeight,
         });
       }
 
-      // Process and add back cover
+      // Process and add back cover (positioned with bleed offset)
       if (book.back_cover_image_url) {
         const backCoverBuffer = await this.processImageForPrint(
           book.back_cover_image_url,
@@ -134,37 +142,36 @@ class PrintReadyPDFService {
           this.trimHeight
         );
 
-        // Place back cover on the left side
-        doc.image(backCoverBuffer, 0, 0, {
+        // Place back cover on the left side (accounting for left bleed)
+        const backCoverX = this.bleed;
+        const backCoverY = this.bleed;
+        doc.image(backCoverBuffer, backCoverX, backCoverY, {
           width: this.trimWidth,
           height: this.trimHeight,
         });
       } else {
-        // Create a simple back cover with book title
-        doc.rect(0, 0, this.trimWidth, this.trimHeight).fill("#ffffff");
+        // Create a simple back cover with book title (positioned with bleed offset)
+        const backCoverX = this.bleed;
+        const backCoverY = this.bleed;
+        doc
+          .rect(backCoverX, backCoverY, this.trimWidth, this.trimHeight)
+          .fill("#ffffff");
 
         doc
           .fontSize(24)
           .fillColor("#000000")
-          .text(book.title, this.safeMargin, this.trimHeight / 2, {
-            width: this.trimWidth - this.safeMargin * 2,
-            align: "center",
-          });
+          .text(
+            book.title,
+            backCoverX + this.safeMargin,
+            backCoverY + this.trimHeight / 2,
+            {
+              width: this.trimWidth - this.safeMargin * 2,
+              align: "center",
+            }
+          );
       }
 
-      // Add spine text if spine is wide enough
-      if (spineWidth > 50) {
-        doc.save();
-        doc.rotate(90, this.trimWidth + spineWidth / 2, this.trimHeight / 2);
-        doc
-          .fontSize(12)
-          .fillColor("#000000")
-          .text(book.title, 0, 0, {
-            width: this.trimHeight - this.safeMargin * 2,
-            align: "center",
-          });
-        doc.restore();
-      }
+      // No spine text needed for saddle stitch binding
 
       doc.end();
 
@@ -194,7 +201,7 @@ class PrintReadyPDFService {
       );
 
       const doc = new PDFDocument({
-        size: [this.trimWidth, this.trimHeight],
+        size: [this.interiorPdfWidth, this.interiorPdfHeight],
         margins: { top: 0, bottom: 0, left: 0, right: 0 },
       });
 
@@ -209,7 +216,12 @@ class PrintReadyPDFService {
           doc.addPage();
         }
 
-        // Add page illustration
+        // Fill entire page with white background (including bleed areas)
+        doc
+          .rect(0, 0, this.interiorPdfWidth, this.interiorPdfHeight)
+          .fill("#ffffff");
+
+        // Add page illustration (positioned with bleed offset)
         if (page.illustration_url) {
           const illustrationBuffer = await this.processImageForPrint(
             page.illustration_url,
@@ -217,21 +229,26 @@ class PrintReadyPDFService {
             this.trimHeight
           );
 
-          doc.image(illustrationBuffer, 0, 0, {
+          // Position content within trim area (accounting for bleed)
+          const contentX = this.bleed;
+          const contentY = this.bleed;
+          doc.image(illustrationBuffer, contentX, contentY, {
             width: this.trimWidth,
             height: this.trimHeight,
           });
         }
 
-        // Add text overlay if needed
+        // Add text overlay if needed (positioned within trim area)
         if (page.text && page.text.trim()) {
-          // Create semi-transparent text area
+          // Create semi-transparent text area (positioned with bleed offset)
           const textAreaHeight = 150;
-          const textAreaY = this.trimHeight - textAreaHeight - this.safeMargin;
+          const textAreaX = this.bleed + this.safeMargin;
+          const textAreaY =
+            this.bleed + this.trimHeight - textAreaHeight - this.safeMargin;
 
           doc
             .rect(
-              this.safeMargin,
+              textAreaX,
               textAreaY,
               this.trimWidth - this.safeMargin * 2,
               textAreaHeight
@@ -240,11 +257,11 @@ class PrintReadyPDFService {
             .fill("#ffffff")
             .fillOpacity(1);
 
-          // Add text
+          // Add text (positioned with bleed offset)
           doc
             .fontSize(16)
             .fillColor("#000000")
-            .text(page.text, this.safeMargin + 20, textAreaY + 20, {
+            .text(page.text, textAreaX + 20, textAreaY + 20, {
               width: this.trimWidth - this.safeMargin * 2 - 40,
               height: textAreaHeight - 40,
               align: "center",
@@ -287,7 +304,7 @@ class PrintReadyPDFService {
         .jpeg({
           quality: 100,
           chromaSubsampling: "4:4:4", // No chroma subsampling for print
-          density: 300, // Ensure 300 DPI
+          density: 72, // 72 DPI
         })
         .toBuffer();
 
