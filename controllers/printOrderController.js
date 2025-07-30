@@ -1,4 +1,5 @@
 const printOrderService = require("../services/printOrderService");
+const { Book } = require("../models");
 const logger = require("../utils/logger");
 
 /**
@@ -128,7 +129,10 @@ const getPrintOrder = async (req, res) => {
 
     logger.info(`Getting print order ${orderId} for user ${userId}`);
 
-    const printOrder = await printOrderService.getPrintOrderById(orderId, userId);
+    const printOrder = await printOrderService.getPrintOrderById(
+      orderId,
+      userId
+    );
 
     res.status(200).json({
       success: true,
@@ -157,7 +161,10 @@ const cancelPrintOrder = async (req, res) => {
 
     logger.info(`Canceling print order ${orderId} for user ${userId}`);
 
-    const canceledOrder = await printOrderService.cancelPrintOrder(orderId, userId);
+    const canceledOrder = await printOrderService.cancelPrintOrder(
+      orderId,
+      userId
+    );
 
     res.status(200).json({
       success: true,
@@ -186,8 +193,11 @@ const getPrintOrderStatus = async (req, res) => {
 
     logger.info(`Getting print order status ${orderId} for user ${userId}`);
 
-    const printOrder = await printOrderService.getPrintOrderById(orderId, userId);
-    
+    const printOrder = await printOrderService.getPrintOrderById(
+      orderId,
+      userId
+    );
+
     if (!printOrder.lulu_print_job_id) {
       return res.status(400).json({
         success: false,
@@ -197,7 +207,9 @@ const getPrintOrderStatus = async (req, res) => {
 
     // Get latest status from Lulu
     const luluService = require("../services/luluService");
-    const luluStatus = await luluService.getPrintJobStatus(printOrder.lulu_print_job_id);
+    const luluStatus = await luluService.getPrintJobStatus(
+      printOrder.lulu_print_job_id
+    );
 
     // Update local status if different
     if (luluStatus.status?.name?.toLowerCase() !== printOrder.status) {
@@ -231,47 +243,83 @@ const getPrintOrderStatus = async (req, res) => {
  */
 const getShippingOptions = async (req, res) => {
   try {
-    const { shippingAddress } = req.body;
+    const { shippingAddress, bookId } = req.body;
 
     logger.info(`Getting shipping options for location`, {
       country: shippingAddress.country_code,
       city: shippingAddress.city,
+      bookId,
     });
 
-    // For now, return all available shipping options
-    // In a real implementation, you might filter based on location
-    const shippingOptions = [
-      {
-        level: "MAIL",
+    // Get book details to determine page count
+    const book = await Book.findById(bookId);
+    if (!book) {
+      return res.status(404).json({
+        success: false,
+        message: "Book not found",
+      });
+    }
+
+    // Get available shipping options from Lulu API
+    const luluService = require("../services/luluService");
+    const luluShippingOptions = await luluService.getShippingOptions(
+      shippingAddress,
+      book.page_count,
+      1 // Default quantity for options lookup
+    );
+
+    // Map Lulu shipping options to our format with user-friendly names
+    const shippingOptionsMap = {
+      MAIL: {
         name: "Standard Mail",
         description: "Slowest shipping method. Tracking may not be available.",
         estimatedDays: "7-14 business days",
       },
-      {
-        level: "PRIORITY_MAIL",
+      PRIORITY_MAIL: {
         name: "Priority Mail",
         description: "Priority mail shipping with tracking.",
         estimatedDays: "3-7 business days",
       },
-      {
-        level: "GROUND",
+      GROUND: {
         name: "Ground Shipping",
         description: "Courier-based ground transportation.",
         estimatedDays: "3-5 business days",
       },
-      {
-        level: "EXPEDITED",
+      EXPEDITED: {
         name: "Expedited Shipping",
         description: "2nd day delivery via air mail.",
         estimatedDays: "2-3 business days",
       },
-      {
-        level: "EXPRESS",
+      EXPRESS: {
         name: "Express Shipping",
         description: "Overnight delivery. Fastest option available.",
         estimatedDays: "1-2 business days",
       },
-    ];
+    };
+
+    // Map Lulu options to our format, only including available options
+    const shippingOptions = luluShippingOptions.map((luluOption) => {
+      const mappedOption = shippingOptionsMap[luluOption.level];
+      return {
+        level: luluOption.level,
+        name: mappedOption?.name || luluOption.level,
+        description: mappedOption?.description || "Shipping option",
+        estimatedDays:
+          mappedOption?.estimatedDays ||
+          `${luluOption.total_days_min || "Unknown"}-${
+            luluOption.total_days_max || "Unknown"
+          } business days`,
+        cost: luluOption.cost_excl_tax || null,
+        traceable: luluOption.traceable || false,
+        minDeliveryDate: luluOption.min_delivery_date,
+        maxDeliveryDate: luluOption.max_delivery_date,
+      };
+    });
+
+    logger.info("Shipping options retrieved successfully", {
+      country: shippingAddress.country_code,
+      availableOptions: shippingOptions.map((opt) => opt.level),
+    });
 
     res.status(200).json({
       success: true,

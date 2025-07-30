@@ -116,15 +116,6 @@ class LuluService {
       const shouldRetry = retryCount < maxRetries && isRetryable;
 
       // Enhanced error logging
-      console.log("=== LULU API ERROR DETAILS ===");
-      console.log("Status:", error.response?.status);
-      console.log("Status Text:", error.response?.statusText);
-      console.log("Error Data:", JSON.stringify(error.response?.data, null, 2));
-      console.log("Error Message:", error.message);
-      console.log("Request URL:", `${this.baseURL}${endpoint}`);
-      console.log("Request Method:", method);
-      console.log("Request Data:", JSON.stringify(data, null, 2));
-      console.log("==============================");
 
       logger.error(`Lulu API request failed: ${method} ${endpoint}`, {
         error: error.response?.data || error.message,
@@ -171,8 +162,6 @@ class LuluService {
         }
       }
 
-      console.log("Detailed Message:", detailedMessage);
-
       // Enhance error with more context
       const enhancedError = new Error(detailedMessage);
       // enhancedError.status = error.response?.status;
@@ -207,6 +196,71 @@ class LuluService {
 
     // Don't retry on client errors (4xx except 401 and 429)
     return false;
+  }
+
+  /**
+   * Get available shipping options for a destination
+   */
+  async getShippingOptions(shippingAddress, pageCount, quantity = 1) {
+    try {
+      logger.info(
+        `Getting shipping options for ${shippingAddress.country_code}`
+      );
+
+      // Prepare request data according to Lulu API specification
+      const requestData = {
+        currency: "USD", // Required field
+        line_items: [
+          {
+            page_count: pageCount,
+            pod_package_id: this.podPackageId,
+            quantity: quantity,
+          },
+        ],
+        shipping_address: {
+          city: shippingAddress.city,
+          country: shippingAddress.country_code, // Note: 'country' not 'country_code'
+          postcode: shippingAddress.postcode,
+          street1: shippingAddress.street1,
+          // Only include state_code if it exists and is not empty
+          ...(shippingAddress.state_code && {
+            state_code: shippingAddress.state_code,
+          }),
+        },
+      };
+
+      logger.info("Lulu shipping options request", {
+        country: shippingAddress.country_code,
+        city: shippingAddress.city,
+        pageCount,
+        quantity,
+        podPackageId: this.podPackageId,
+        requestData: JSON.stringify(requestData, null, 2),
+      });
+
+      const result = await this.makeRequest(
+        "POST",
+        "/shipping-options/",
+        requestData
+      );
+
+      logger.info("Shipping options retrieved successfully", {
+        country: shippingAddress.country_code,
+        optionsCount: result?.length || 0,
+      });
+
+      // The response is directly an array of shipping options
+      return result || [];
+    } catch (error) {
+      logger.error("Failed to get shipping options:", {
+        error: error.message,
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        responseData: error.response?.data,
+        country: shippingAddress.country_code,
+      });
+      throw new Error(`Failed to get shipping options: ${error.message}`);
+    }
   }
 
   /**
@@ -258,12 +312,6 @@ class LuluService {
         },
         shipping_option: shippingLevel,
       };
-
-      console.log("=== LULU REQUEST DEBUG ===");
-      console.log("POD Package ID:", this.podPackageId);
-      console.log("Base URL:", this.baseURL);
-      console.log("Request Data:", JSON.stringify(requestData, null, 2));
-      console.log("========================");
 
       const result = await this.makeRequest(
         "POST",
@@ -519,6 +567,195 @@ class LuluService {
     } catch (error) {
       logger.error("Failed to calculate cover dimensions:", error.message);
       throw new Error("Failed to calculate cover dimensions");
+    }
+  }
+
+  // ==================== WEBHOOK MANAGEMENT METHODS ====================
+
+  /**
+   * Create a webhook subscription
+   */
+  async createWebhook(webhookUrl, topics = ["PRINT_JOB_STATUS_CHANGED"]) {
+    try {
+      logger.info("Creating webhook subscription", {
+        url: webhookUrl,
+        topics: topics,
+      });
+
+      const requestData = {
+        url: webhookUrl,
+        topics: topics,
+        is_active: true,
+      };
+
+      const result = await this.makeRequest("POST", "/webhooks/", requestData);
+
+      logger.info("Webhook created successfully", {
+        webhookId: result.id,
+        url: result.url,
+        topics: result.topics,
+        isActive: result.is_active,
+      });
+
+      return result;
+    } catch (error) {
+      logger.error("Failed to create webhook:", error.message);
+      throw new Error("Failed to create webhook");
+    }
+  }
+
+  /**
+   * List all webhook subscriptions
+   */
+  async listWebhooks() {
+    try {
+      logger.debug("Fetching webhook subscriptions");
+
+      const result = await this.makeRequest("GET", "/webhooks/");
+
+      logger.debug("Webhooks retrieved successfully", {
+        count: result.results?.length || 0,
+      });
+
+      return result;
+    } catch (error) {
+      logger.error("Failed to list webhooks:", error.message);
+      throw new Error("Failed to list webhooks");
+    }
+  }
+
+  /**
+   * Get a specific webhook by ID
+   */
+  async getWebhook(webhookId) {
+    try {
+      logger.debug(`Fetching webhook ${webhookId}`);
+
+      const result = await this.makeRequest("GET", `/webhooks/${webhookId}/`);
+
+      logger.debug("Webhook retrieved successfully", {
+        webhookId: result.id,
+        url: result.url,
+        isActive: result.is_active,
+      });
+
+      return result;
+    } catch (error) {
+      logger.error(`Failed to get webhook ${webhookId}:`, error.message);
+      throw new Error("Failed to get webhook");
+    }
+  }
+
+  /**
+   * Update a webhook subscription
+   */
+  async updateWebhook(webhookId, updates) {
+    try {
+      logger.info(`Updating webhook ${webhookId}`, updates);
+
+      const result = await this.makeRequest(
+        "PATCH",
+        `/webhooks/${webhookId}/`,
+        updates
+      );
+
+      logger.info("Webhook updated successfully", {
+        webhookId: result.id,
+        url: result.url,
+        topics: result.topics,
+        isActive: result.is_active,
+      });
+
+      return result;
+    } catch (error) {
+      logger.error(`Failed to update webhook ${webhookId}:`, error.message);
+      throw new Error("Failed to update webhook");
+    }
+  }
+
+  /**
+   * Delete a webhook subscription
+   */
+  async deleteWebhook(webhookId) {
+    try {
+      logger.info(`Deleting webhook ${webhookId}`);
+
+      await this.makeRequest("DELETE", `/webhooks/${webhookId}/`);
+
+      logger.info("Webhook deleted successfully", { webhookId });
+
+      return { success: true, webhookId };
+    } catch (error) {
+      logger.error(`Failed to delete webhook ${webhookId}:`, error.message);
+      throw new Error("Failed to delete webhook");
+    }
+  }
+
+  /**
+   * Test webhook submission
+   */
+  async testWebhook(webhookId, topic = "PRINT_JOB_STATUS_CHANGED") {
+    try {
+      logger.info(`Testing webhook ${webhookId} with topic ${topic}`);
+
+      const result = await this.makeRequest(
+        "POST",
+        `/webhooks/${webhookId}/test-submission/${topic}/`
+      );
+
+      logger.info("Webhook test initiated successfully", {
+        webhookId,
+        topic,
+        message: result,
+      });
+
+      return result;
+    } catch (error) {
+      logger.error(
+        `Failed to test webhook ${webhookId} with topic ${topic}:`,
+        error.message
+      );
+      throw new Error("Failed to test webhook");
+    }
+  }
+
+  /**
+   * Get webhook submissions (delivery history)
+   */
+  async getWebhookSubmissions(filters = {}) {
+    try {
+      logger.debug("Fetching webhook submissions", filters);
+
+      // Build query parameters
+      const queryParams = new URLSearchParams();
+      if (filters.page) queryParams.append("page", filters.page);
+      if (filters.pageSize) queryParams.append("page_size", filters.pageSize);
+      if (filters.createdAfter)
+        queryParams.append("created_after", filters.createdAfter);
+      if (filters.createdBefore)
+        queryParams.append("created_before", filters.createdBefore);
+      if (filters.isSuccess !== undefined)
+        queryParams.append("is_success", filters.isSuccess);
+      if (filters.responseCode)
+        queryParams.append("response_code", filters.responseCode);
+      if (filters.webhookId)
+        queryParams.append("webhook_id", filters.webhookId);
+
+      const endpoint = `/webhook-submissions/${
+        queryParams.toString() ? `?${queryParams.toString()}` : ""
+      }`;
+
+      const result = await this.makeRequest("GET", endpoint);
+
+      logger.debug("Webhook submissions retrieved successfully", {
+        count: result.results?.length || 0,
+        total: result.count,
+      });
+
+      return result;
+    } catch (error) {
+      logger.error("Failed to get webhook submissions:", error.message);
+      throw new Error("Failed to get webhook submissions");
     }
   }
 }

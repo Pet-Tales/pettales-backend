@@ -4,6 +4,7 @@ const userRoutes = require("./user");
 const characterRoutes = require("./character");
 const webhookRoutes = require("./webhook");
 const bookRoutes = require("./book");
+const webhookManagementRoutes = require("./webhookManagement");
 const pageRoutes = require("./page");
 const galleryRoutes = require("./gallery");
 const illustrationRoutes = require("./illustrationRoutes");
@@ -45,5 +46,8 @@ router.use("/print-orders", printOrderRoutes);
 
 // Mount webhook routes
 router.use("/webhook", webhookRoutes);
+
+// Admin webhook management routes
+router.use("/admin/webhooks", webhookManagementRoutes);
 
 module.exports = router;

@@ -22,13 +22,47 @@ class PrintOrderService {
         throw new Error("Book not found");
       }
 
+      // First, get available shipping options for the destination
+      logger.info("Getting available shipping options for destination", {
+        country: shippingAddress.country_code,
+        requestedShippingLevel: shippingLevel,
+      });
+
+      const availableShippingOptions = await luluService.getShippingOptions(
+        shippingAddress,
+        book.page_count,
+        quantity
+      );
+
+      // Validate that the requested shipping level is available
+      const isShippingLevelAvailable = availableShippingOptions.some(
+        (option) => option.level === shippingLevel
+      );
+
+      if (!isShippingLevelAvailable) {
+        const availableLevels = availableShippingOptions.map(
+          (option) => option.level
+        );
+        logger.error("Requested shipping level not available", {
+          requestedLevel: shippingLevel,
+          availableLevels,
+          country: shippingAddress.country_code,
+          totalOptionsFound: availableShippingOptions.length,
+        });
+        throw new Error(
+          `Shipping level "${shippingLevel}" is not available for ${
+            shippingAddress.country_code
+          }. Available options: ${availableLevels.join(", ") || "None"}`
+        );
+      }
+
       // Calculate cost using Lulu API
-      console.log("=== CALLING LULU SERVICE ===");
-      console.log("Book page count:", book.page_count);
-      console.log("Quantity:", quantity);
-      console.log("Shipping address:", shippingAddress);
-      console.log("Shipping level:", shippingLevel);
-      console.log("============================");
+      logger.info("Calculating cost with validated shipping option", {
+        bookPageCount: book.page_count,
+        quantity,
+        shippingLevel,
+        country: shippingAddress.country_code,
+      });
 
       const luluCostData = await luluService.calculatePrintCost(
         book.page_count,
@@ -38,7 +72,7 @@ class PrintOrderService {
       );
 
       const luluCostUSD = parseFloat(luluCostData.total_cost_incl_tax);
-      const markupPercentage = 20; // 20% markup
+      const markupPercentage = 50; // 50% markup
       const totalCostUSD = luluCostUSD * (1 + markupPercentage / 100);
       const totalCostCredits = Math.ceil(totalCostUSD / CREDIT_VALUE_USD);
 
@@ -47,9 +81,6 @@ class PrintOrderService {
         book_title: book.title,
         page_count: book.page_count,
         quantity: quantity,
-        lulu_cost_usd: luluCostUSD,
-        markup_percentage: markupPercentage,
-        markup_amount_usd: totalCostUSD - luluCostUSD,
         total_cost_usd: totalCostUSD,
         total_cost_credits: totalCostCredits,
         shipping_level: shippingLevel,

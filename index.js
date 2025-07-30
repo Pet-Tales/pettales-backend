@@ -9,6 +9,7 @@ const connectDB = require("./config/database");
 const routes = require("./routes");
 const { authenticateUser } = require("./middleware");
 const { sessionCleanup } = require("./services");
+const webhookLifecycleService = require("./services/webhookLifecycleService");
 const {
   PORT,
   DEBUG_MODE,
@@ -101,15 +102,60 @@ app.use((err, _req, res, _next) => {
 // Start session cleanup service
 sessionCleanup.startSessionCleanup();
 
+// Initialize webhook lifecycle service
+const initializeWebhookService = async () => {
+  try {
+    logger.info("Initializing webhook lifecycle service...");
+    await webhookLifecycleService.initialize();
+    logger.info("Webhook lifecycle service initialized successfully");
+  } catch (error) {
+    logger.error("Failed to initialize webhook lifecycle service:", error);
+    // Don't exit the process, webhook can be registered manually later
+    logger.warn(
+      "Server will continue without webhook registration. Use admin panel to register manually."
+    );
+  }
+};
+
 app
-  .listen(PORT, () => {
+  .listen(PORT, async () => {
     logger.system(`Server started successfully`, {
       port: PORT,
       environment: DEBUG_MODE ? "development" : "production",
       url: `http://127.0.0.1:${PORT}`,
     });
+
+    // Initialize webhook service after server starts
+    await initializeWebhookService();
   })
   .on("error", (err) => {
     logger.error(`Server startup error: ${err}`);
     process.exit(1);
   });
+
+// Graceful shutdown handling
+process.on("SIGTERM", async () => {
+  logger.info("SIGTERM received, shutting down gracefully");
+
+  try {
+    await webhookLifecycleService.cleanup();
+    logger.info("Webhook lifecycle service cleaned up");
+  } catch (error) {
+    logger.error("Error during webhook cleanup:", error);
+  }
+
+  process.exit(0);
+});
+
+process.on("SIGINT", async () => {
+  logger.info("SIGINT received, shutting down gracefully");
+
+  try {
+    await webhookLifecycleService.cleanup();
+    logger.info("Webhook lifecycle service cleaned up");
+  } catch (error) {
+    logger.error("Error during webhook cleanup:", error);
+  }
+
+  process.exit(0);
+});

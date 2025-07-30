@@ -62,6 +62,7 @@ const LULU_ENVIRONMENT = process.env.LULU_ENVIRONMENT || "sandbox";
 const LULU_POD_PACKAGE_ID =
   process.env.LULU_POD_PACKAGE_ID || "0750X0750FCPRESS080CW444MXX";
 const LULU_WEBHOOK_SECRET = process.env.LULU_WEBHOOK_SECRET;
+const LULU_WEBHOOK_URL = process.env.LULU_WEBHOOK_URL;
 
 // Illustration Styles
 const ILLUST_ANIME =
@@ -227,6 +228,7 @@ module.exports = {
   LULU_ENVIRONMENT,
   LULU_POD_PACKAGE_ID,
   LULU_WEBHOOK_SECRET,
+  LULU_WEBHOOK_URL,
 
   // Illustration Styles
   ILLUST_ANIME,
