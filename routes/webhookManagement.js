@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const webhookManagementController = require("../controllers/webhookManagementController");
-const { authenticateToken, requireAdmin } = require("../middleware/auth");
+const { authenticateUser, requireAuth } = require("../middleware/auth");
 const rateLimit = require("express-rate-limit");
 
 // Rate limiting for webhook management endpoints
@@ -17,9 +17,8 @@ const webhookManagementRateLimit = rateLimit({
   legacyHeaders: false,
 });
 
-// Apply authentication and admin requirement to all routes
-router.use(authenticateToken);
-router.use(requireAdmin);
+// Apply authentication requirement to all routes
+router.use(requireAuth);
 router.use(webhookManagementRateLimit);
 
 /**

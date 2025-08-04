@@ -81,6 +81,8 @@ class PrintOrderService {
         book_title: book.title,
         page_count: book.page_count,
         quantity: quantity,
+        lulu_cost_usd: luluCostUSD, // Keep for internal use (database storage)
+        markup_percentage: markupPercentage, // Keep for internal use (database storage)
         total_cost_usd: totalCostUSD,
         total_cost_credits: totalCostCredits,
         shipping_level: shippingLevel,

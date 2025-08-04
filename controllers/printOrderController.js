@@ -24,10 +24,13 @@ const calculateCost = async (req, res) => {
       shippingLevel
     );
 
+    // Filter out markup information for frontend response
+    const { lulu_cost_usd, markup_percentage, ...publicCostData } = costData;
+
     res.status(200).json({
       success: true,
       message: "Cost calculated successfully",
-      data: costData,
+      data: publicCostData,
     });
   } catch (error) {
     logger.error("Failed to calculate print order cost:", error.message);

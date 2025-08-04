@@ -17,12 +17,12 @@ class PrintReadyPDFService {
     // Bleed margin (0.125" on all sides)
     this.bleed = 0.125 * 72; // 9 pixels
 
-    // Interior PDF dimensions with bleed: 7.75" x 7.75"
+    // Interior PDF dimensions (keep original size): 7.75" x 7.75"
     this.interiorPdfWidth = this.trimWidth + this.bleed * 2; // 558 pixels (7.75")
     this.interiorPdfHeight = this.trimHeight + this.bleed * 2; // 558 pixels (7.75")
 
-    // Cover PDF dimensions with bleed: 15.25" x 7.75"
-    // Cover includes front + back + bleed on all sides
+    // Cover PDF dimensions (keep original size): 15.25" x 7.75"
+    // Cover includes front + back + bleed areas
     this.coverPdfHeight = this.trimHeight + this.bleed * 2; // 558 pixels (7.75")
 
     // Safe area (0.25" margin from trim)
@@ -43,7 +43,7 @@ class PrintReadyPDFService {
       }
 
       const pages = await Page.find({ book_id: bookId }).sort({
-        page_number: 1,
+        book_page_number: 1,
       });
       if (!pages || pages.length === 0) {
         throw new Error("No pages found for book");
@@ -101,7 +101,7 @@ class PrintReadyPDFService {
       );
 
       // For saddle stitch binding, no spine width needed
-      // Total cover width with bleed = front + back + bleed on left and right
+      // Total cover width (keep original size) = front + back + bleed areas
       // 15.25" = 7.5" (front) + 7.5" (back) + 0.125" (left bleed) + 0.125" (right bleed)
       const coverPdfWidth = this.trimWidth * 2 + this.bleed * 2; // 1098 pixels (15.25" at 72 DPI)
       const coverPdfHeight = this.coverPdfHeight; // 558 pixels (7.75" at 72 DPI)
@@ -114,47 +114,47 @@ class PrintReadyPDFService {
       const stream = fs.createWriteStream(coverPdfPath);
       doc.pipe(stream);
 
-      // Fill entire PDF with white background (including bleed areas)
+      // Fill entire PDF with white background
       doc.rect(0, 0, coverPdfWidth, coverPdfHeight).fill("#ffffff");
 
-      // Process and add front cover (positioned with bleed offset)
+      // Process and add front cover (fill right half of PDF)
       if (book.front_cover_image_url) {
         const frontCoverBuffer = await this.processImageForPrint(
           book.front_cover_image_url,
-          this.trimWidth,
-          this.trimHeight
+          coverPdfWidth / 2,
+          coverPdfHeight
         );
 
-        // Place front cover on the right side (accounting for left bleed + back cover)
-        const frontCoverX = this.bleed + this.trimWidth;
-        const frontCoverY = this.bleed;
+        // Place front cover on the right side (fill entire right half)
+        const frontCoverX = coverPdfWidth / 2;
+        const frontCoverY = 0;
         doc.image(frontCoverBuffer, frontCoverX, frontCoverY, {
-          width: this.trimWidth,
-          height: this.trimHeight,
+          width: coverPdfWidth / 2,
+          height: coverPdfHeight,
         });
       }
 
-      // Process and add back cover (positioned with bleed offset)
+      // Process and add back cover (fill left half of PDF)
       if (book.back_cover_image_url) {
         const backCoverBuffer = await this.processImageForPrint(
           book.back_cover_image_url,
-          this.trimWidth,
-          this.trimHeight
+          coverPdfWidth / 2,
+          coverPdfHeight
         );
 
-        // Place back cover on the left side (accounting for left bleed)
-        const backCoverX = this.bleed;
-        const backCoverY = this.bleed;
+        // Place back cover on the left side (fill entire left half)
+        const backCoverX = 0;
+        const backCoverY = 0;
         doc.image(backCoverBuffer, backCoverX, backCoverY, {
-          width: this.trimWidth,
-          height: this.trimHeight,
+          width: coverPdfWidth / 2,
+          height: coverPdfHeight,
         });
       } else {
-        // Create a simple back cover with book title (positioned with bleed offset)
-        const backCoverX = this.bleed;
-        const backCoverY = this.bleed;
+        // Create a simple back cover with book title (fill entire left half)
+        const backCoverX = 0;
+        const backCoverY = 0;
         doc
-          .rect(backCoverX, backCoverY, this.trimWidth, this.trimHeight)
+          .rect(backCoverX, backCoverY, coverPdfWidth / 2, coverPdfHeight)
           .fill("#ffffff");
 
         doc
@@ -208,64 +208,99 @@ class PrintReadyPDFService {
       const stream = fs.createWriteStream(interiorPdfPath);
       doc.pipe(stream);
 
-      // Process each page
-      for (let i = 0; i < pages.length; i++) {
-        const page = pages[i];
-
-        if (i > 0) {
-          doc.addPage();
+      // Group pages by story_page_number to combine text and illustration pages
+      const pageGroups = {};
+      pages.forEach((page) => {
+        const storyPageNum = page.story_page_number;
+        if (!pageGroups[storyPageNum]) {
+          pageGroups[storyPageNum] = {};
         }
 
-        // Fill entire page with white background (including bleed areas)
-        doc
-          .rect(0, 0, this.interiorPdfWidth, this.interiorPdfHeight)
-          .fill("#ffffff");
+        if (page.page_type === "illustration") {
+          pageGroups[storyPageNum].illustration = page;
+        } else if (page.page_type === "text") {
+          pageGroups[storyPageNum].text = page;
+        }
+      });
 
-        // Add page illustration (positioned with bleed offset)
-        if (page.illustration_url) {
+      logger.info("Print PDF: Page grouping completed", {
+        totalPages: pages.length,
+        storyPages: Object.keys(pageGroups).length,
+        pageGroups: Object.keys(pageGroups).map((storyPageNum) => ({
+          storyPageNum,
+          hasIllustration: !!pageGroups[storyPageNum].illustration,
+          hasText: !!pageGroups[storyPageNum].text,
+          textContent:
+            pageGroups[storyPageNum].text?.text_content?.substring(0, 50) +
+            "...",
+        })),
+      });
+
+      // Sort story page numbers and create separate illustration and text pages
+      const sortedStoryPages = Object.keys(pageGroups).sort(
+        (a, b) => parseInt(a) - parseInt(b)
+      );
+
+      let isFirstPage = true;
+
+      for (let i = 0; i < sortedStoryPages.length; i++) {
+        const storyPageNum = sortedStoryPages[i];
+        const pageGroup = pageGroups[storyPageNum];
+
+        // Add illustration page (if exists)
+        if (pageGroup.illustration && pageGroup.illustration.illustration_url) {
+          if (!isFirstPage) {
+            doc.addPage();
+          }
+          isFirstPage = false;
+
+          // Fill entire page with white background
+          doc
+            .rect(0, 0, this.interiorPdfWidth, this.interiorPdfHeight)
+            .fill("#ffffff");
+
           const illustrationBuffer = await this.processImageForPrint(
-            page.illustration_url,
-            this.trimWidth,
-            this.trimHeight
+            pageGroup.illustration.illustration_url,
+            this.interiorPdfWidth,
+            this.interiorPdfHeight
           );
 
-          // Position content within trim area (accounting for bleed)
-          const contentX = this.bleed;
-          const contentY = this.bleed;
-          doc.image(illustrationBuffer, contentX, contentY, {
-            width: this.trimWidth,
-            height: this.trimHeight,
+          // Position illustration to fill entire PDF page
+          doc.image(illustrationBuffer, 0, 0, {
+            width: this.interiorPdfWidth,
+            height: this.interiorPdfHeight,
           });
         }
 
-        // Add text overlay if needed (positioned within trim area)
-        if (page.text && page.text.trim()) {
-          // Create semi-transparent text area (positioned with bleed offset)
-          const textAreaHeight = 150;
-          const textAreaX = this.bleed + this.safeMargin;
-          const textAreaY =
-            this.bleed + this.trimHeight - textAreaHeight - this.safeMargin;
+        // Add text page (if exists)
+        if (
+          pageGroup.text &&
+          pageGroup.text.text_content &&
+          pageGroup.text.text_content.trim()
+        ) {
+          if (!isFirstPage) {
+            doc.addPage();
+          }
+          isFirstPage = false;
 
+          // Fill entire page with white background
           doc
-            .rect(
-              textAreaX,
-              textAreaY,
-              this.trimWidth - this.safeMargin * 2,
-              textAreaHeight
-            )
-            .fillOpacity(0.8)
-            .fill("#ffffff")
-            .fillOpacity(1);
+            .rect(0, 0, this.interiorPdfWidth, this.interiorPdfHeight)
+            .fill("#ffffff");
 
-          // Add text (positioned with bleed offset)
+          // Add text with margins (similar to preview PDF)
+          const textMargin = 50;
+          const textAreaX = textMargin;
+          const textAreaY = 150;
+          const textAreaWidth = this.interiorPdfWidth - textMargin * 2;
+
           doc
             .fontSize(16)
-            .fillColor("#000000")
-            .text(page.text, textAreaX + 20, textAreaY + 20, {
-              width: this.trimWidth - this.safeMargin * 2 - 40,
-              height: textAreaHeight - 40,
+            .fillColor("#333333")
+            .text(pageGroup.text.text_content, textAreaX, textAreaY, {
+              width: textAreaWidth,
               align: "center",
-              valign: "center",
+              lineGap: 10,
             });
         }
       }
