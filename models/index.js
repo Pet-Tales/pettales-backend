@@ -4,6 +4,7 @@ const Character = require("./Character");
 const Page = require("./Page");
 const Book = require("./Book");
 const CreditTransaction = require("./CreditTransaction");
+const PrintOrder = require("./PrintOrder");
 
 module.exports = {
   User,
@@ -12,4 +13,5 @@ module.exports = {
   Page,
   Book,
   CreditTransaction,
+  PrintOrder,
 };

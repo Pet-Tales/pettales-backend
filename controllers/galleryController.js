@@ -24,6 +24,7 @@ const getPublicBooks = async (req, res) => {
       page: parseInt(req.query.page) || 1,
       limit: parseInt(req.query.limit) || 12,
       search: req.query.search || "",
+      searchType: req.query.searchType || "all",
       sortBy: req.query.sortBy || "created_at",
       sortOrder: req.query.sortOrder || "desc",
     };
