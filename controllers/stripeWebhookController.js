@@ -72,11 +72,11 @@ const handleCheckoutSessionCompleted = async (session) => {
       return;
     }
 
-    // For PDF downloads by guests, we don't need to add credits to any user account
-    // The payment success is handled by the frontend redirect
-    if (sessionType === "pdf_download" && userId.startsWith("guest_")) {
+    // For PDF downloads (both guests and authenticated users), we don't need to add credits
+    // The payment success is handled by the frontend redirect and session verification
+    if (sessionType === "pdf_download") {
       logger.info(
-        `PDF download payment completed for guest session: ${session.id}`
+        `PDF download payment completed for session: ${session.id} (user: ${userId})`
       );
       return;
     }
