@@ -29,6 +29,55 @@ class PrintReadyPDFService {
     this.safeMargin = 0.25 * 72; // 18 pixels
   }
 
+  // Register Patrick Hand font for a PDF document
+  registerPatrickHandFont(doc) {
+    try {
+      const fontPath = path.join(
+        __dirname,
+        "..",
+        "assets",
+        "fonts",
+        "PatrickHand-Regular.ttf"
+      );
+      if (fs.existsSync(fontPath)) {
+        doc.registerFont("PatrickHand", fontPath);
+        logger.info(
+          "Patrick Hand font registered successfully for print-ready PDF"
+        );
+      } else {
+        logger.warn(
+          `Patrick Hand font not found at: ${fontPath}, falling back to Helvetica`
+        );
+      }
+    } catch (error) {
+      logger.error("Error registering Patrick Hand font:", error.message);
+    }
+  }
+
+  // Get the appropriate font name (Patrick Hand if available, otherwise Helvetica)
+  getFont(style = "regular") {
+    const fontPath = path.join(
+      __dirname,
+      "..",
+      "assets",
+      "fonts",
+      "PatrickHand-Regular.ttf"
+    );
+    if (fs.existsSync(fontPath)) {
+      return "PatrickHand"; // Patrick Hand doesn't have separate bold/italic variants
+    }
+
+    // Fallback to Helvetica variants
+    switch (style) {
+      case "bold":
+        return "Helvetica-Bold";
+      case "italic":
+        return "Helvetica-Oblique";
+      default:
+        return "Helvetica";
+    }
+  }
+
   /**
    * Generate print-ready PDFs for a book
    */
@@ -111,6 +160,9 @@ class PrintReadyPDFService {
         margins: { top: 0, bottom: 0, left: 0, right: 0 },
       });
 
+      // Register Patrick Hand font
+      this.registerPatrickHandFont(doc);
+
       const stream = fs.createWriteStream(coverPdfPath);
       doc.pipe(stream);
 
@@ -159,6 +211,7 @@ class PrintReadyPDFService {
 
         doc
           .fontSize(24)
+          .font(this.getFont("bold"))
           .fillColor("#000000")
           .text(
             book.title,
@@ -204,6 +257,9 @@ class PrintReadyPDFService {
         size: [this.interiorPdfWidth, this.interiorPdfHeight],
         margins: { top: 0, bottom: 0, left: 0, right: 0 },
       });
+
+      // Register Patrick Hand font
+      this.registerPatrickHandFont(doc);
 
       const stream = fs.createWriteStream(interiorPdfPath);
       doc.pipe(stream);
@@ -296,6 +352,7 @@ class PrintReadyPDFService {
 
           doc
             .fontSize(16)
+            .font(this.getFont())
             .fillColor("#333333")
             .text(pageGroup.text.text_content, textAreaX, textAreaY, {
               width: textAreaWidth,
