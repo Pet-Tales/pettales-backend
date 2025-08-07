@@ -51,6 +51,20 @@ const AWS_LAMBDA_FUNCTION_NAME = process.env.AWS_LAMBDA_FUNCTION_NAME;
 // Replicate Configuration
 const REPLICATE_API_TOKEN = process.env.REPLICATE_API_TOKEN;
 
+// Lulu API Configuration
+const LULU_CLIENT_KEY = process.env.LULU_CLIENT_KEY;
+const LULU_CLIENT_SECRET = process.env.LULU_CLIENT_SECRET;
+const LULU_API_BASE_URL =
+  process.env.LULU_API_BASE_URL || "https://api.lulu.com";
+const LULU_SANDBOX_API_BASE_URL =
+  process.env.LULU_SANDBOX_API_BASE_URL || "https://api.sandbox.lulu.com";
+const LULU_ENVIRONMENT = process.env.LULU_ENVIRONMENT || "sandbox";
+const LULU_POD_PACKAGE_ID =
+  process.env.LULU_POD_PACKAGE_ID || "0750X0750FCPRESS080CW444MXX";
+const LULU_WEBHOOK_SECRET = process.env.LULU_WEBHOOK_SECRET;
+const LULU_WEBHOOK_URL = process.env.LULU_WEBHOOK_URL;
+const LULU_BASE64_ENCODED_KEY_SECRET = process.env.LULU_BASE64_ENCODED_KEY_SECRET;
+
 // Illustration Styles
 const ILLUST_ANIME =
   process.env.ILLUST_ANIME ||
@@ -120,14 +134,28 @@ const validateRequiredEnvVars = () => {
   const required = [
     { name: "MONGODB_URI", value: MONGODB_URI },
     { name: "WEB_URL", value: WEB_URL },
+    { name: "LULU_CLIENT_KEY", value: LULU_CLIENT_KEY },
+    { name: "LULU_CLIENT_SECRET", value: LULU_CLIENT_SECRET },
+  ];
+
+  // Optional but recommended for webhook functionality
+  const webhookRequired = [
+    { name: "LULU_WEBHOOK_SECRET", value: LULU_WEBHOOK_SECRET },
+    { name: "LULU_WEBHOOK_URL", value: LULU_WEBHOOK_URL },
   ];
 
   const missing = required.filter((env) => !env.value);
+  const missingWebhook = webhookRequired.filter((env) => !env.value);
 
   if (missing.length > 0) {
     logger.error("Missing required environment variables:");
     missing.forEach((env) => logger.error(`- ${env.name}`));
     process.exit(1);
+  }
+
+  if (missingWebhook.length > 0) {
+    logger.warn("Missing webhook-related environment variables (webhook functionality will be limited):");
+    missingWebhook.forEach((env) => logger.warn(`- ${env.name}`));
   }
 };
 
@@ -206,6 +234,17 @@ module.exports = {
 
   // Replicate
   REPLICATE_API_TOKEN,
+
+  // Lulu API
+  LULU_CLIENT_KEY,
+  LULU_CLIENT_SECRET,
+  LULU_API_BASE_URL,
+  LULU_SANDBOX_API_BASE_URL,
+  LULU_ENVIRONMENT,
+  LULU_POD_PACKAGE_ID,
+  LULU_WEBHOOK_SECRET,
+  LULU_WEBHOOK_URL,
+  LULU_BASE64_ENCODED_KEY_SECRET,
 
   // Illustration Styles
   ILLUST_ANIME,

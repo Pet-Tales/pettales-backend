@@ -609,114 +609,78 @@ const downloadPDF = async (req, res) => {
       });
     }
 
-    // Guest user - check for valid session or redirect to Stripe checkout
-    if (!userId) {
-      // Check if guest user has a valid session ID (from successful payment)
-      const sessionId = req.query.session_id;
+    // Check for valid session ID (from successful payment) - works for both guests and authenticated users
+    const sessionId = req.query.session_id;
+    if (sessionId) {
+      try {
+        const isValidSession = await stripeService.isSessionCompletedForBook(
+          sessionId,
+          id
+        );
 
-      if (sessionId) {
-        try {
-          const isValidSession = await stripeService.isSessionCompletedForBook(
-            sessionId,
-            id
+        if (isValidSession) {
+          const userType = userId ? "authenticated user" : "guest user";
+          logger.info(
+            `${userType} with valid session ${sessionId} downloading PDF for book ${id}`
           );
-
-          if (isValidSession) {
-            logger.info(
-              `Guest user with valid session ${sessionId} downloading PDF for book ${id}`
-            );
-            return streamPDFToClient(book, id, res);
-          } else {
-            logger.warn(
-              `Guest user provided invalid session ${sessionId} for book ${id}`
-            );
-          }
-        } catch (sessionError) {
-          logger.error(
-            `Error verifying session for guest: ${sessionError.message}`
-          );
+          return streamPDFToClient(book, id, res);
+        } else {
+          logger.warn(`Invalid session ${sessionId} provided for book ${id}`);
         }
+      } catch (sessionError) {
+        logger.error(`Error verifying session: ${sessionError.message}`);
       }
+    }
 
+    // No valid session - redirect to Stripe checkout (same flow for both guests and authenticated users)
+    let checkoutUserId, userEmail;
+
+    if (userId) {
+      // Authenticated user
+      checkoutUserId = userId;
+      userEmail = req.user.email;
+      logger.info(
+        `Authenticated user ${userId} requesting PDF download for book ${id}, redirecting to payment`
+      );
+    } else {
+      // Guest user - create a temporary user identifier for the session
+      checkoutUserId = `guest_${Date.now()}_${Math.random()
+        .toString(36)
+        .substr(2, 9)}`;
+      userEmail = null;
       logger.info(
         `Guest user requesting PDF download for book ${id}, redirecting to payment`
       );
-
-      // Create a temporary user identifier for the session
-      const guestId = `guest_${Date.now()}_${Math.random()
-        .toString(36)
-        .substr(2, 9)}`;
-
-      try {
-        const session = await stripeService.createCreditPurchaseSession(
-          guestId,
-          CREDIT_COSTS.PDF_DOWNLOAD,
-          null, // No email for guest
-          "pdf-download",
-          {
-            bookId: id,
-            returnUrl: `/books/${id}`,
-          }
-        );
-
-        return res.json({
-          success: true,
-          requiresPayment: true,
-          isGuest: true,
-          checkoutUrl: session.url,
-          message: "Payment required for PDF download",
-        });
-      } catch (stripeError) {
-        logger.error(
-          `Failed to create checkout session for guest: ${stripeError.message}`
-        );
-        return res.status(500).json({
-          success: false,
-          message: "Failed to create payment session",
-        });
-      }
     }
 
-    // Authenticated user - check credits and deduct
-    const user = req.user;
-    if (user.credits_balance < CREDIT_COSTS.PDF_DOWNLOAD) {
-      logger.info(
-        `User ${userId} has insufficient credits for PDF download (${user.credits_balance} < ${CREDIT_COSTS.PDF_DOWNLOAD})`
-      );
-      return res.status(402).json({
-        success: false,
-        message: "Insufficient credits for PDF download",
-        error: "INSUFFICIENT_CREDITS",
-        data: {
-          required: CREDIT_COSTS.PDF_DOWNLOAD,
-          available: user.credits_balance,
-          shortfall: CREDIT_COSTS.PDF_DOWNLOAD - user.credits_balance,
-        },
-      });
-    }
-
-    // Deduct credits and proceed with download
     try {
-      await creditService.deductCredits(
-        userId,
+      const session = await stripeService.createCreditPurchaseSession(
+        checkoutUserId,
         CREDIT_COSTS.PDF_DOWNLOAD,
-        `PDF download for book: ${book.title}`,
-        { bookId: id }
+        userEmail,
+        "pdf-download",
+        {
+          bookId: id,
+          returnUrl: `/books/${id}`,
+        }
       );
 
-      logger.info(
-        `User ${userId} paid ${CREDIT_COSTS.PDF_DOWNLOAD} credits for PDF download of book ${id}`
-      );
-
-      // Stream the PDF
-      return streamPDFToClient(book, id, res);
-    } catch (creditError) {
+      return res.json({
+        success: true,
+        requiresPayment: true,
+        isGuest: !userId,
+        checkoutUrl: session.url,
+        message: "Payment required for PDF download",
+      });
+    } catch (stripeError) {
       logger.error(
-        `Failed to deduct credits for user ${userId}: ${creditError.message}`
+        `Failed to create checkout session for ${
+          userId ? "user" : "guest"
+        } ${checkoutUserId}: ${stripeError.message}`
       );
       return res.status(500).json({
         success: false,
-        message: "Failed to process payment",
+        message: "Failed to create payment session",
       });
     }
   } catch (error) {

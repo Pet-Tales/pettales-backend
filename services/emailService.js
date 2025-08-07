@@ -367,6 +367,210 @@ const sendContactForm = async (
   }
 };
 
+/**
+ * Send print order shipped email
+ */
+const sendPrintOrderShippedEmail = async (user, printOrder, trackingInfo) => {
+  try {
+    const { WEB_URL } = require("../utils/constants");
+
+    const templateParams = {
+      firstName: user.first_name,
+      bookTitle: printOrder.book_title,
+      orderId: printOrder.external_id,
+      trackingId: trackingInfo.tracking_id,
+      trackingUrls: trackingInfo.tracking_urls || [],
+      carrierName: trackingInfo.carrier_name,
+      shippingAddress: formatShippingAddress(printOrder.shipping_address),
+      myOrdersUrl: `${WEB_URL}/my-orders`,
+    };
+
+    const template = getTemplate("printOrderShipped", user.language || "en");
+    const emailContent = template(templateParams);
+
+    await sendEmail({
+      to: user.email,
+      subject: emailContent.subject,
+      textBody: emailContent.textBody,
+      htmlBody: emailContent.htmlBody,
+    });
+
+    logger.info("Print order shipped email sent successfully", {
+      userId: user._id,
+      orderId: printOrder.external_id,
+      trackingId: trackingInfo.tracking_id,
+    });
+  } catch (error) {
+    logger.error("Failed to send print order shipped email:", error);
+    throw error;
+  }
+};
+
+/**
+ * Send print order rejected email
+ */
+const sendPrintOrderRejectedEmail = async (user, printOrder, errorMessage, creditsRefunded) => {
+  try {
+    const { WEB_URL, NO_REPLY_EMAIL_ADDRESS } = require("../utils/constants");
+
+    const templateParams = {
+      firstName: user.first_name,
+      bookTitle: printOrder.book_title,
+      orderId: printOrder.external_id,
+      errorMessage: errorMessage,
+      creditsRefunded: creditsRefunded,
+      myOrdersUrl: `${WEB_URL}/my-orders`,
+      supportEmail: NO_REPLY_EMAIL_ADDRESS,
+    };
+
+    const template = getTemplate("printOrderRejected", user.language || "en");
+    const emailContent = template(templateParams);
+
+    await sendEmail({
+      to: user.email,
+      subject: emailContent.subject,
+      textBody: emailContent.textBody,
+      htmlBody: emailContent.htmlBody,
+    });
+
+    logger.info("Print order rejected email sent successfully", {
+      userId: user._id,
+      orderId: printOrder.external_id,
+      creditsRefunded,
+    });
+  } catch (error) {
+    logger.error("Failed to send print order rejected email:", error);
+    throw error;
+  }
+};
+
+/**
+ * Send print order canceled email
+ */
+const sendPrintOrderCanceledEmail = async (user, printOrder, reason, creditsRefunded) => {
+  try {
+    const { WEB_URL, NO_REPLY_EMAIL_ADDRESS } = require("../utils/constants");
+
+    const templateParams = {
+      firstName: user.first_name,
+      bookTitle: printOrder.book_title,
+      orderId: printOrder.external_id,
+      reason: reason,
+      creditsRefunded: creditsRefunded,
+      myOrdersUrl: `${WEB_URL}/my-orders`,
+      supportEmail: NO_REPLY_EMAIL_ADDRESS,
+    };
+
+    const template = getTemplate("printOrderCanceled", user.language || "en");
+    const emailContent = template(templateParams);
+
+    await sendEmail({
+      to: user.email,
+      subject: emailContent.subject,
+      textBody: emailContent.textBody,
+      htmlBody: emailContent.htmlBody,
+    });
+
+    logger.info("Print order canceled email sent successfully", {
+      userId: user._id,
+      orderId: printOrder.external_id,
+      creditsRefunded,
+    });
+  } catch (error) {
+    logger.error("Failed to send print order canceled email:", error);
+    throw error;
+  }
+};
+
+/**
+ * Send print order in production email
+ */
+const sendPrintOrderInProductionEmail = async (user, printOrder) => {
+  try {
+    const { WEB_URL } = require("../utils/constants");
+
+    const templateParams = {
+      firstName: user.first_name,
+      bookTitle: printOrder.book_title,
+      orderId: printOrder.external_id,
+      shippingAddress: formatShippingAddress(printOrder.shipping_address),
+      myOrdersUrl: `${WEB_URL}/my-orders`,
+    };
+
+    const template = getTemplate("printOrderInProduction", user.language || "en");
+    const emailContent = template(templateParams);
+
+    await sendEmail({
+      to: user.email,
+      subject: emailContent.subject,
+      textBody: emailContent.textBody,
+      htmlBody: emailContent.htmlBody,
+    });
+
+    logger.info("Print order in production email sent successfully", {
+      userId: user._id,
+      orderId: printOrder.external_id,
+    });
+  } catch (error) {
+    logger.error("Failed to send print order in production email:", error);
+    throw error;
+  }
+};
+
+/**
+ * Send general print order status update email
+ */
+const sendPrintOrderStatusUpdateEmail = async (user, printOrder, status) => {
+  try {
+    const { WEB_URL } = require("../utils/constants");
+
+    const templateParams = {
+      firstName: user.first_name,
+      bookTitle: printOrder.book_title,
+      orderId: printOrder.external_id,
+      status: status,
+      statusMessage: null, // Will be generated by template
+      myOrdersUrl: `${WEB_URL}/my-orders`,
+    };
+
+    const template = getTemplate("printOrderStatusUpdate", user.language || "en");
+    const emailContent = template(templateParams);
+
+    await sendEmail({
+      to: user.email,
+      subject: emailContent.subject,
+      textBody: emailContent.textBody,
+      htmlBody: emailContent.htmlBody,
+    });
+
+    logger.info("Print order status update email sent successfully", {
+      userId: user._id,
+      orderId: printOrder.external_id,
+      status,
+    });
+  } catch (error) {
+    logger.error("Failed to send print order status update email:", error);
+    throw error;
+  }
+};
+
+/**
+ * Format shipping address for display
+ */
+const formatShippingAddress = (address) => {
+  if (!address) return '';
+
+  const parts = [
+    address.name,
+    address.street1,
+    address.street2,
+    `${address.city}, ${address.state_code} ${address.postcode}`,
+    address.country_code
+  ].filter(Boolean);
+
+  return parts.join('\n');
+};
+
 module.exports = {
   sendEmail,
   sendEmailVerification,
@@ -377,4 +581,9 @@ module.exports = {
   sendBookGenerationSuccess,
   sendBookGenerationFailure,
   sendContactForm,
+  sendPrintOrderShippedEmail,
+  sendPrintOrderRejectedEmail,
+  sendPrintOrderCanceledEmail,
+  sendPrintOrderInProductionEmail,
+  sendPrintOrderStatusUpdateEmail,
 };

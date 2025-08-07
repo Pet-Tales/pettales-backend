@@ -4,11 +4,13 @@ const userRoutes = require("./user");
 const characterRoutes = require("./character");
 const webhookRoutes = require("./webhook");
 const bookRoutes = require("./book");
+const webhookManagementRoutes = require("./webhookManagement");
 const pageRoutes = require("./page");
 const galleryRoutes = require("./gallery");
 const illustrationRoutes = require("./illustrationRoutes");
 const creditRoutes = require("./credit");
 const contactRoutes = require("./contact");
+const printOrderRoutes = require("./printOrder");
 
 const router = express.Router();
 
@@ -39,7 +41,13 @@ router.use("/credits", creditRoutes);
 // Mount contact routes (public, no auth required)
 router.use("/contact", contactRoutes);
 
+// Mount print order routes
+router.use("/print-orders", printOrderRoutes);
+
 // Mount webhook routes
 router.use("/webhook", webhookRoutes);
+
+// Admin webhook management routes
+router.use("/admin/webhooks", webhookManagementRoutes);
 
 module.exports = router;
