@@ -6,6 +6,9 @@ const { LULU_WEBHOOK_SECRET } = require("../utils/constants");
 
 /**
  * Verify Lulu webhook signature
+ * According to Lulu docs: HMAC is calculated with API secret as a key (UTF-8 encoded),
+ * payload as a message (UTF-8 encoded) and SHA-256 as hash function.
+ * HMAC is sent in Lulu-HMAC-SHA256 header.
  */
 const verifyWebhookSignature = (payload, signature) => {
   if (!LULU_WEBHOOK_SECRET) {
@@ -15,7 +18,14 @@ const verifyWebhookSignature = (payload, signature) => {
     return true; // Allow in development/testing
   }
 
+  if (!signature) {
+    logger.warn("No Lulu-HMAC-SHA256 signature provided");
+    return false;
+  }
+
   try {
+    // Calculate expected signature using raw payload data
+    // Important: Use raw response data to avoid JSON formatting issues
     const expectedSignature = crypto
       .createHmac("sha256", LULU_WEBHOOK_SECRET)
       .update(payload, "utf8")
@@ -24,6 +34,7 @@ const verifyWebhookSignature = (payload, signature) => {
     // Lulu sends signature as "Lulu-HMAC-SHA256: <signature>"
     const receivedSignature = signature.replace("Lulu-HMAC-SHA256: ", "");
 
+    // Use timing-safe comparison to prevent timing attacks
     return crypto.timingSafeEqual(
       Buffer.from(expectedSignature, "hex"),
       Buffer.from(receivedSignature, "hex")
@@ -37,21 +48,34 @@ const verifyWebhookSignature = (payload, signature) => {
 /**
  * Handle Lulu print job status change webhook
  * POST /api/webhooks/lulu/print-job-status
+ *
+ * According to Lulu docs:
+ * - Each submission payload contains 2 fields: topic and data
+ * - Data depends on the topic
+ * - PRINT_JOB_STATUS_CHANGED webhook is sent every time owned print job status is updated
+ * - The data sent in the payload is print job data, same as returned by print job details endpoint
  */
 const handlePrintJobStatusChange = async (req, res) => {
   try {
     const signature = req.headers["lulu-hmac-sha256"];
-    const payload = JSON.stringify(req.body);
+
+    // Important: Use raw payload for signature verification to avoid JSON formatting issues
+    // We need to capture the raw body before JSON parsing
+    const payload = req.rawBody || JSON.stringify(req.body);
 
     logger.info("Received Lulu webhook", {
       topic: req.body.topic,
       printJobId: req.body.data?.id,
       status: req.body.data?.status?.name,
+      hasSignature: !!signature,
     });
 
-    // Verify webhook signature
+    // Verify webhook signature using raw payload
     if (!verifyWebhookSignature(payload, signature)) {
-      logger.error("Invalid webhook signature");
+      logger.error("Invalid webhook signature", {
+        receivedSignature: signature,
+        payloadLength: payload.length,
+      });
       return res.status(401).json({
         success: false,
         message: "Invalid signature",
@@ -59,6 +83,18 @@ const handlePrintJobStatusChange = async (req, res) => {
     }
 
     const { topic, data } = req.body;
+
+    // Validate required fields according to Lulu webhook spec
+    if (!topic || !data) {
+      logger.error("Invalid webhook payload: missing topic or data", {
+        hasTopic: !!topic,
+        hasData: !!data,
+      });
+      return res.status(400).json({
+        success: false,
+        message: "Invalid payload: missing topic or data",
+      });
+    }
 
     // Handle different webhook topics
     switch (topic) {
@@ -73,12 +109,17 @@ const handlePrintJobStatusChange = async (req, res) => {
         });
     }
 
+    // Return 200 status to acknowledge successful processing
+    // This prevents Lulu from retrying the webhook
     res.status(200).json({
       success: true,
       message: "Webhook processed successfully",
     });
   } catch (error) {
     logger.error("Error processing Lulu webhook:", error);
+
+    // Return 500 status to trigger Lulu's retry mechanism
+    // According to docs, failed submissions are retried 5 times
     res.status(500).json({
       success: false,
       message: "Internal server error",
@@ -254,17 +295,34 @@ const handleOrderInProduction = async (printOrder) => {
  */
 const sendOrderStatusEmail = async (printOrder, status) => {
   try {
-    // TODO: Implement email service integration
     logger.info("Sending order status email", {
       printOrderId: printOrder._id,
       status,
       userEmail: printOrder.shipping_address?.email,
     });
 
-    // Placeholder for email service
-    // await emailService.sendOrderStatusEmail(printOrder, status);
+    // Get user information for email
+    const User = require("../models/User");
+    const user = await User.findById(printOrder.user_id);
+
+    if (user) {
+      const emailService = require("../services/emailService");
+      await emailService.sendPrintOrderStatusUpdateEmail(user, printOrder, status);
+
+      logger.info("Order status email sent successfully", {
+        userId: user._id,
+        orderId: printOrder.external_id,
+        status,
+      });
+    } else {
+      logger.warn("Could not send status email - user not found", {
+        userId: printOrder.user_id,
+        orderId: printOrder.external_id,
+      });
+    }
   } catch (error) {
     logger.error("Error sending order status email:", error);
+    // Don't throw - email failure shouldn't fail the webhook processing
   }
 };
 
@@ -278,10 +336,29 @@ const sendOrderShippedEmail = async (printOrder, trackingInfo) => {
       trackingId: trackingInfo?.tracking_id,
     });
 
-    // TODO: Implement email service integration
-    // await emailService.sendOrderShippedEmail(printOrder, trackingInfo);
+    // Get user information for email
+    const User = require("../models/User");
+    const user = await User.findById(printOrder.user_id);
+
+    if (user && trackingInfo) {
+      const emailService = require("../services/emailService");
+      await emailService.sendPrintOrderShippedEmail(user, printOrder, trackingInfo);
+
+      logger.info("Order shipped email sent successfully", {
+        userId: user._id,
+        orderId: printOrder.external_id,
+        trackingId: trackingInfo.tracking_id,
+      });
+    } else {
+      logger.warn("Could not send shipped email - missing user or tracking info", {
+        hasUser: !!user,
+        hasTrackingInfo: !!trackingInfo,
+        orderId: printOrder.external_id,
+      });
+    }
   } catch (error) {
     logger.error("Error sending order shipped email:", error);
+    // Don't throw - email failure shouldn't fail the webhook processing
   }
 };
 
@@ -295,10 +372,33 @@ const sendOrderRejectedEmail = async (printOrder, errorMessage) => {
       errorMessage,
     });
 
-    // TODO: Implement email service integration
-    // await emailService.sendOrderRejectedEmail(printOrder, errorMessage);
+    // Get user information for email
+    const User = require("../models/User");
+    const user = await User.findById(printOrder.user_id);
+
+    if (user) {
+      const emailService = require("../services/emailService");
+      await emailService.sendPrintOrderRejectedEmail(
+        user,
+        printOrder,
+        errorMessage,
+        printOrder.total_cost_credits
+      );
+
+      logger.info("Order rejected email sent successfully", {
+        userId: user._id,
+        orderId: printOrder.external_id,
+        creditsRefunded: printOrder.total_cost_credits,
+      });
+    } else {
+      logger.warn("Could not send rejected email - user not found", {
+        userId: printOrder.user_id,
+        orderId: printOrder.external_id,
+      });
+    }
   } catch (error) {
     logger.error("Error sending order rejected email:", error);
+    // Don't throw - email failure shouldn't fail the webhook processing
   }
 };
 
@@ -312,10 +412,33 @@ const sendOrderCanceledEmail = async (printOrder, reason) => {
       reason,
     });
 
-    // TODO: Implement email service integration
-    // await emailService.sendOrderCanceledEmail(printOrder, reason);
+    // Get user information for email
+    const User = require("../models/User");
+    const user = await User.findById(printOrder.user_id);
+
+    if (user) {
+      const emailService = require("../services/emailService");
+      await emailService.sendPrintOrderCanceledEmail(
+        user,
+        printOrder,
+        reason,
+        printOrder.total_cost_credits
+      );
+
+      logger.info("Order canceled email sent successfully", {
+        userId: user._id,
+        orderId: printOrder.external_id,
+        creditsRefunded: printOrder.total_cost_credits,
+      });
+    } else {
+      logger.warn("Could not send canceled email - user not found", {
+        userId: printOrder.user_id,
+        orderId: printOrder.external_id,
+      });
+    }
   } catch (error) {
     logger.error("Error sending order canceled email:", error);
+    // Don't throw - email failure shouldn't fail the webhook processing
   }
 };
 
@@ -328,10 +451,27 @@ const sendOrderInProductionEmail = async (printOrder) => {
       printOrderId: printOrder._id,
     });
 
-    // TODO: Implement email service integration
-    // await emailService.sendOrderInProductionEmail(printOrder);
+    // Get user information for email
+    const User = require("../models/User");
+    const user = await User.findById(printOrder.user_id);
+
+    if (user) {
+      const emailService = require("../services/emailService");
+      await emailService.sendPrintOrderInProductionEmail(user, printOrder);
+
+      logger.info("Order in production email sent successfully", {
+        userId: user._id,
+        orderId: printOrder.external_id,
+      });
+    } else {
+      logger.warn("Could not send in production email - user not found", {
+        userId: printOrder.user_id,
+        orderId: printOrder.external_id,
+      });
+    }
   } catch (error) {
     logger.error("Error sending order in production email:", error);
+    // Don't throw - email failure shouldn't fail the webhook processing
   }
 };
 

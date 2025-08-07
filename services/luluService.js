@@ -582,10 +582,11 @@ class LuluService {
         topics: topics,
       });
 
+      // According to Lulu API docs, only 'url' and 'topics' are required for creation
+      // 'is_active' is not part of the creation schema and is set to true by default
       const requestData = {
         url: webhookUrl,
         topics: topics,
-        is_active: true,
       };
 
       const result = await this.makeRequest("POST", "/webhooks/", requestData);

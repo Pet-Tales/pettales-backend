@@ -85,6 +85,13 @@ router.get("/submissions", webhookManagementController.getWebhookSubmissions);
 router.get("/", webhookManagementController.listWebhooks);
 
 /**
+ * @route GET /api/admin/webhooks/:webhookId
+ * @desc Get single webhook by ID
+ * @access Admin
+ */
+router.get("/:webhookId", webhookManagementController.getWebhook);
+
+/**
  * @route PATCH /api/admin/webhooks/:webhookId
  * @desc Update webhook configuration
  * @access Admin
