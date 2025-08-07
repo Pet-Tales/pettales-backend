@@ -52,12 +52,26 @@ const registerWebhook = async (req, res) => {
 /**
  * Test webhook functionality
  * POST /api/admin/webhooks/test
+ *
+ * According to Lulu docs: Test endpoint sends dummy data of the selected topic to configured URL
+ * Response: "Test webhook submission queued"
  */
 const testWebhook = async (req, res) => {
   try {
-    logger.info("Webhook test requested");
+    const { topic = "PRINT_JOB_STATUS_CHANGED" } = req.body;
 
-    const result = await webhookLifecycleService.testWebhook();
+    logger.info("Webhook test requested", { topic });
+
+    // Validate topic
+    const validTopics = ["PRINT_JOB_STATUS_CHANGED"];
+    if (!validTopics.includes(topic)) {
+      return res.status(400).json({
+        success: false,
+        message: `Invalid topic. Valid topics are: ${validTopics.join(", ")}`,
+      });
+    }
+
+    const result = await webhookLifecycleService.testWebhook(topic);
 
     res.status(200).json({
       success: true,
@@ -138,6 +152,32 @@ const listWebhooks = async (req, res) => {
     res.status(500).json({
       success: false,
       message: error.message || "Failed to list webhooks",
+    });
+  }
+};
+
+/**
+ * Get single webhook by ID
+ * GET /api/admin/webhooks/:webhookId
+ */
+const getWebhook = async (req, res) => {
+  try {
+    const { webhookId } = req.params;
+
+    logger.info(`Getting webhook ${webhookId}`);
+
+    const webhook = await luluService.getWebhook(webhookId);
+
+    res.status(200).json({
+      success: true,
+      data: webhook,
+    });
+  } catch (error) {
+    logger.error(`Failed to get webhook ${req.params.webhookId}:`, error);
+    const statusCode = error.message.includes("Not found") ? 404 : 500;
+    res.status(statusCode).json({
+      success: false,
+      message: error.message || "Failed to get webhook",
     });
   }
 };
@@ -345,6 +385,7 @@ module.exports = {
   testWebhook,
   getWebhookSubmissions,
   listWebhooks,
+  getWebhook,
   updateWebhook,
   deleteWebhook,
   forceHealthCheck,

@@ -63,6 +63,7 @@ const LULU_POD_PACKAGE_ID =
   process.env.LULU_POD_PACKAGE_ID || "0750X0750FCPRESS080CW444MXX";
 const LULU_WEBHOOK_SECRET = process.env.LULU_WEBHOOK_SECRET;
 const LULU_WEBHOOK_URL = process.env.LULU_WEBHOOK_URL;
+const LULU_BASE64_ENCODED_KEY_SECRET = process.env.LULU_BASE64_ENCODED_KEY_SECRET;
 
 // Illustration Styles
 const ILLUST_ANIME =
@@ -133,14 +134,28 @@ const validateRequiredEnvVars = () => {
   const required = [
     { name: "MONGODB_URI", value: MONGODB_URI },
     { name: "WEB_URL", value: WEB_URL },
+    { name: "LULU_CLIENT_KEY", value: LULU_CLIENT_KEY },
+    { name: "LULU_CLIENT_SECRET", value: LULU_CLIENT_SECRET },
+  ];
+
+  // Optional but recommended for webhook functionality
+  const webhookRequired = [
+    { name: "LULU_WEBHOOK_SECRET", value: LULU_WEBHOOK_SECRET },
+    { name: "LULU_WEBHOOK_URL", value: LULU_WEBHOOK_URL },
   ];
 
   const missing = required.filter((env) => !env.value);
+  const missingWebhook = webhookRequired.filter((env) => !env.value);
 
   if (missing.length > 0) {
     logger.error("Missing required environment variables:");
     missing.forEach((env) => logger.error(`- ${env.name}`));
     process.exit(1);
+  }
+
+  if (missingWebhook.length > 0) {
+    logger.warn("Missing webhook-related environment variables (webhook functionality will be limited):");
+    missingWebhook.forEach((env) => logger.warn(`- ${env.name}`));
   }
 };
 
@@ -229,6 +244,7 @@ module.exports = {
   LULU_POD_PACKAGE_ID,
   LULU_WEBHOOK_SECRET,
   LULU_WEBHOOK_URL,
+  LULU_BASE64_ENCODED_KEY_SECRET,
 
   // Illustration Styles
   ILLUST_ANIME,

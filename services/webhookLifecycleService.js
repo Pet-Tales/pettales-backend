@@ -256,6 +256,8 @@ class WebhookLifecycleService {
 
   /**
    * Check recent webhook submissions for failures
+   * According to Lulu docs: After 5 different failed submissions in a row,
+   * the webhook is deactivated (is_active field is set to false)
    */
   async checkRecentSubmissions() {
     try {
@@ -274,17 +276,45 @@ class WebhookLifecycleService {
           (submission) => !submission.is_success
         );
 
+        // Check for consecutive failures that might trigger deactivation
+        const recentSubmissions = submissions.results
+          .sort((a, b) => new Date(b.date_created) - new Date(a.date_created))
+          .slice(0, 10); // Check last 10 submissions
+
+        let consecutiveFailures = 0;
+        for (const submission of recentSubmissions) {
+          if (!submission.is_success) {
+            consecutiveFailures++;
+          } else {
+            break; // Stop counting if we hit a successful submission
+          }
+        }
+
         if (failedSubmissions.length > 0) {
           logger.warn("Found failed webhook submissions", {
             totalSubmissions: submissions.results.length,
             failedSubmissions: failedSubmissions.length,
-            failures: failedSubmissions.map((sub) => ({
+            consecutiveFailures,
+            failures: failedSubmissions.slice(0, 5).map((sub) => ({
               responseCode: sub.response_code,
               attempts: sub.attempts,
               topic: sub.topic,
               dateCreated: sub.date_created,
             })),
           });
+
+          // Alert if we're approaching the 5 consecutive failure limit
+          if (consecutiveFailures >= 3) {
+            logger.warn(
+              `Webhook has ${consecutiveFailures} consecutive failures. ` +
+              `Webhook will be deactivated after 5 consecutive failures.`,
+              {
+                webhookId: this.registeredWebhookId,
+                consecutiveFailures,
+                recentFailures: recentSubmissions.slice(0, consecutiveFailures),
+              }
+            );
+          }
         } else {
           logger.debug("All recent webhook submissions successful", {
             totalSubmissions: submissions.results.length,
@@ -298,28 +328,34 @@ class WebhookLifecycleService {
 
   /**
    * Test webhook functionality
+   * According to Lulu docs: Test endpoint sends dummy data of the selected topic to configured URL
    */
-  async testWebhook() {
+  async testWebhook(topic = "PRINT_JOB_STATUS_CHANGED") {
     try {
       if (!this.registeredWebhookId) {
         throw new Error("No webhook registered");
       }
 
-      logger.info(`Testing webhook ${this.registeredWebhookId}`);
+      // Validate topic
+      const validTopics = ["PRINT_JOB_STATUS_CHANGED"];
+      if (!validTopics.includes(topic)) {
+        throw new Error(`Invalid topic. Valid topics are: ${validTopics.join(", ")}`);
+      }
 
-      const result = await luluService.testWebhook(
-        this.registeredWebhookId,
-        "PRINT_JOB_STATUS_CHANGED"
-      );
+      logger.info(`Testing webhook ${this.registeredWebhookId} with topic ${topic}`);
+
+      const result = await luluService.testWebhook(this.registeredWebhookId, topic);
 
       logger.info("Webhook test completed", {
         webhookId: this.registeredWebhookId,
+        topic,
         result,
       });
 
       return {
         success: true,
         webhookId: this.registeredWebhookId,
+        topic,
         result,
       };
     } catch (error) {
