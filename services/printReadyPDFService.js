@@ -29,10 +29,59 @@ class PrintReadyPDFService {
     this.safeMargin = 0.25 * 72; // 18 pixels
   }
 
+  // Register Patrick Hand font for a PDF document
+  registerPatrickHandFont(doc) {
+    try {
+      const fontPath = path.join(
+        __dirname,
+        "..",
+        "assets",
+        "fonts",
+        "PatrickHand-Regular.ttf"
+      );
+      if (fs.existsSync(fontPath)) {
+        doc.registerFont("PatrickHand", fontPath);
+        logger.info(
+          "Patrick Hand font registered successfully for print-ready PDF"
+        );
+      } else {
+        logger.warn(
+          `Patrick Hand font not found at: ${fontPath}, falling back to Helvetica`
+        );
+      }
+    } catch (error) {
+      logger.error("Error registering Patrick Hand font:", error.message);
+    }
+  }
+
+  // Get the appropriate font name (Patrick Hand if available, otherwise Helvetica)
+  getFont(style = "regular") {
+    const fontPath = path.join(
+      __dirname,
+      "..",
+      "assets",
+      "fonts",
+      "PatrickHand-Regular.ttf"
+    );
+    if (fs.existsSync(fontPath)) {
+      return "PatrickHand"; // Patrick Hand doesn't have separate bold/italic variants
+    }
+
+    // Fallback to Helvetica variants
+    switch (style) {
+      case "bold":
+        return "Helvetica-Bold";
+      case "italic":
+        return "Helvetica-Oblique";
+      default:
+        return "Helvetica";
+    }
+  }
+
   /**
    * Generate print-ready PDFs for a book
    */
-  async generatePrintReadyPDFs(bookId) {
+  async generatePrintReadyPDFs(bookId, userId, orderId) {
     try {
       logger.info(`Generating print-ready PDFs for book ${bookId}`);
 
@@ -55,15 +104,14 @@ class PrintReadyPDFService {
       // Generate interior PDF
       const interiorPdfPath = await this.generateInteriorPDF(book, pages);
 
+      // Generate S3 keys with new path pattern
+      const timestamp = Date.now();
+      const coverS3Key = `${userId}/orders/${orderId}/${bookId}_${timestamp}-cover.pdf`;
+      const interiorS3Key = `${userId}/orders/${orderId}/${bookId}_${timestamp}-interior.pdf`;
+
       // Upload PDFs to S3
-      const coverPdfUrl = await this.uploadPDFToS3(
-        coverPdfPath,
-        `print-covers/${bookId}-cover.pdf`
-      );
-      const interiorPdfUrl = await this.uploadPDFToS3(
-        interiorPdfPath,
-        `print-interiors/${bookId}-interior.pdf`
-      );
+      const coverPdfUrl = await this.uploadPDFToS3(coverPdfPath, coverS3Key);
+      const interiorPdfUrl = await this.uploadPDFToS3(interiorPdfPath, interiorS3Key);
 
       // Clean up local files
       fs.unlinkSync(coverPdfPath);
@@ -71,6 +119,8 @@ class PrintReadyPDFService {
 
       logger.info("Print-ready PDFs generated successfully", {
         bookId,
+        userId,
+        orderId,
         coverPdfUrl,
         interiorPdfUrl,
       });
@@ -111,6 +161,9 @@ class PrintReadyPDFService {
         margins: { top: 0, bottom: 0, left: 0, right: 0 },
       });
 
+      // Register Patrick Hand font
+      this.registerPatrickHandFont(doc);
+
       const stream = fs.createWriteStream(coverPdfPath);
       doc.pipe(stream);
 
@@ -149,26 +202,63 @@ class PrintReadyPDFService {
           width: coverPdfWidth / 2,
           height: coverPdfHeight,
         });
+
+        // Add moral text overlay on back cover if available
+        if (book.moral_of_back_cover && book.moral_of_back_cover.trim()) {
+          const textAreaX = backCoverX + this.safeMargin;
+          const textAreaY = backCoverY + this.trimHeight / 2 - 50;
+          const textAreaWidth = this.trimWidth - this.safeMargin * 2;
+
+          doc
+            .fontSize(16)
+            .font(this.getFont())
+            .fillColor("#ffffff")
+            .text(book.moral_of_back_cover, textAreaX, textAreaY, {
+              width: textAreaWidth,
+              align: "center",
+              lineGap: 8,
+            });
+        }
       } else {
-        // Create a simple back cover with book title (fill entire left half)
+        // Create a simple back cover with book title and moral (fill entire left half)
         const backCoverX = 0;
         const backCoverY = 0;
         doc
           .rect(backCoverX, backCoverY, coverPdfWidth / 2, coverPdfHeight)
           .fill("#ffffff");
 
+        // Add book title
         doc
           .fontSize(24)
+          .font(this.getFont("bold"))
           .fillColor("#000000")
           .text(
             book.title,
             backCoverX + this.safeMargin,
-            backCoverY + this.trimHeight / 2,
+            backCoverY + this.trimHeight / 3,
             {
               width: this.trimWidth - this.safeMargin * 2,
               align: "center",
             }
           );
+
+        // Add moral text if available
+        if (book.moral_of_back_cover && book.moral_of_back_cover.trim()) {
+          doc
+            .fontSize(16)
+            .font(this.getFont())
+            .fillColor("#333333")
+            .text(
+              book.moral_of_back_cover,
+              backCoverX + this.safeMargin,
+              backCoverY + (this.trimHeight * 2) / 3,
+              {
+                width: this.trimWidth - this.safeMargin * 2,
+                align: "center",
+                lineGap: 8,
+              }
+            );
+        }
       }
 
       // No spine text needed for saddle stitch binding
@@ -205,8 +295,61 @@ class PrintReadyPDFService {
         margins: { top: 0, bottom: 0, left: 0, right: 0 },
       });
 
+      // Register Patrick Hand font
+      this.registerPatrickHandFont(doc);
+
       const stream = fs.createWriteStream(interiorPdfPath);
       doc.pipe(stream);
+
+      let isFirstPage = true;
+
+      // Always add dedication page as the first page (blank if no dedication)
+      logger.info("Print PDF: Adding dedication page", {
+        bookId: book._id,
+        hasDedication: !!book.dedication,
+        dedicationValue: book.dedication,
+        dedicationLength: book.dedication ? book.dedication.length : 0,
+        dedicationTrimmed: book.dedication ? book.dedication.trim() : null,
+        dedicationTrimmedLength: book.dedication && book.dedication.trim() ? book.dedication.trim().length : 0,
+      });
+
+      // Fill entire page with white background
+      doc
+        .rect(0, 0, this.interiorPdfWidth, this.interiorPdfHeight)
+        .fill("#ffffff");
+
+      // Add dedication text if it exists, otherwise leave page blank
+      if (book.dedication && book.dedication.trim()) {
+        logger.info("Print PDF: Adding dedication text to page", {
+          dedicationText: book.dedication.trim(),
+        });
+
+        const textMargin = 50;
+        const textAreaX = textMargin;
+        const textAreaY = this.interiorPdfHeight / 2 - 50;
+        const textAreaWidth = this.interiorPdfWidth - textMargin * 2;
+
+        doc
+          .fontSize(18)
+          .font(this.getFont("italic"))
+          .fillColor("#333333")
+          .text(book.dedication, textAreaX, textAreaY, {
+            width: textAreaWidth,
+            align: "center",
+            lineGap: 8,
+          });
+
+        logger.info("Print PDF: Dedication text added successfully");
+      } else {
+        logger.info("Print PDF: Dedication page left blank (no dedication text)", {
+          dedicationIsNull: book.dedication === null,
+          dedicationIsUndefined: book.dedication === undefined,
+          dedicationIsEmpty: book.dedication === "",
+          dedicationAfterTrim: book.dedication ? book.dedication.trim() : "N/A",
+        });
+      }
+
+      isFirstPage = false;
 
       // Group pages by story_page_number to combine text and illustration pages
       const pageGroups = {};
@@ -240,8 +383,6 @@ class PrintReadyPDFService {
       const sortedStoryPages = Object.keys(pageGroups).sort(
         (a, b) => parseInt(a) - parseInt(b)
       );
-
-      let isFirstPage = true;
 
       for (let i = 0; i < sortedStoryPages.length; i++) {
         const storyPageNum = sortedStoryPages[i];
@@ -296,6 +437,7 @@ class PrintReadyPDFService {
 
           doc
             .fontSize(16)
+            .font(this.getFont())
             .fillColor("#333333")
             .text(pageGroup.text.text_content, textAreaX, textAreaY, {
               width: textAreaWidth,
@@ -304,6 +446,10 @@ class PrintReadyPDFService {
             });
         }
       }
+
+      // Add logo page at the end
+      doc.addPage();
+      this.addLogoPage(doc);
 
       doc.end();
 
@@ -364,6 +510,99 @@ class PrintReadyPDFService {
     } catch (error) {
       logger.error("Failed to upload PDF to S3:", error);
       throw error;
+    }
+  }
+
+  /**
+   * Add logo page with copyright information
+   */
+  addLogoPage(doc) {
+    // Fill entire page with white background
+    doc
+      .rect(0, 0, this.interiorPdfWidth, this.interiorPdfHeight)
+      .fill("#ffffff");
+
+    const logoPath = path.join(__dirname, "..", "assets", "logo.png");
+
+    try {
+      // Check if logo file exists
+      if (fs.existsSync(logoPath)) {
+        // Calculate logo dimensions and position
+        const logoMaxWidth = 350; // Maximum logo width
+        const logoMaxHeight = 250; // Maximum logo height
+
+        // Calculate total height of logo + gap + text to center the group vertically
+        const textHeight = 80; // Approximate height for 4 lines of text with line gaps
+        const gapBetweenLogoAndText = 40;
+        const totalContentHeight =
+          logoMaxHeight + gapBetweenLogoAndText + textHeight;
+
+        // Center the entire group vertically
+        const groupStartY = (this.interiorPdfHeight - totalContentHeight) / 2;
+        const logoY = groupStartY;
+
+        // Position logo horizontally centered
+        const logoX = (this.interiorPdfWidth - logoMaxWidth) / 2;
+
+        // Add the logo
+        doc.image(logoPath, logoX, logoY, {
+          fit: [logoMaxWidth, logoMaxHeight],
+          align: "center",
+        });
+
+        // Add copyright text below the logo
+        const textStartY = logoY + logoMaxHeight + gapBetweenLogoAndText;
+        const copyrightText = `Published by Pet Tales
+© 2025
+Written with love by our AI friend, M-AI
+Printed with pawsitivity in the UK`;
+
+        doc
+          .fontSize(14)
+          .font(this.getFont())
+          .fillColor("#0f5636")
+          .text(copyrightText, 50, textStartY, {
+            width: this.interiorPdfWidth - 100,
+            align: "center",
+            lineGap: 8,
+          });
+      } else {
+        logger.warn(`Logo not found at: ${logoPath}, adding text only`);
+
+        // Fallback: Add only copyright text if logo is missing
+        const copyrightText = `Published by Pet Tales
+© 2025
+Written with love by our AI friend, M-AI
+Printed with pawsitivity in the UK`;
+
+        doc
+          .fontSize(14)
+          .font(this.getFont())
+          .fillColor("#0f5636")
+          .text(copyrightText, 50, this.interiorPdfHeight / 2 - 40, {
+            width: this.interiorPdfWidth - 100,
+            align: "center",
+            lineGap: 8,
+          });
+      }
+    } catch (error) {
+      logger.error(`Error adding logo page:`, error.message);
+
+      // Fallback: Add only copyright text if there's an error with the logo
+      const copyrightText = `Published by Pet Tales
+© 2025
+Written with love by our AI friend, M-AI
+Printed with pawsitivity in the UK`;
+
+      doc
+        .fontSize(14)
+        .font(this.getFont())
+        .fillColor("#0f5636")
+        .text(copyrightText, 50, this.interiorPdfHeight / 2 - 40, {
+          width: this.interiorPdfWidth - 100,
+          align: "center",
+          lineGap: 8,
+        });
     }
   }
 

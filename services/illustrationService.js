@@ -91,6 +91,109 @@ class IllustrationService {
   }
 
   /**
+   * Upscale image using Replicate Real-ESRGAN and save to local file
+   */
+  async upscaleImage(inputImagePath, outputImagePath) {
+    logger.info(`Upscaling image: ${inputImagePath}`);
+
+    const maxRetries = 3;
+    let lastError;
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        logger.info(`Upscaling image (attempt ${attempt}/${maxRetries})...`);
+
+        // Read the input image file
+        const imageBuffer = await fs.promises.readFile(inputImagePath);
+
+        const input = {
+          image: imageBuffer,
+          upscale: 2,
+        };
+
+        const output = await this.replicate.run(
+          "cjwbw/real-esrgan:d0ee3d708c9b911f122a4ad90046c5d26a0293b99476d697f6bb7f2e251ce2d4",
+          { input }
+        );
+
+        // Save the upscaled output to local file
+        await fs.promises.writeFile(outputImagePath, output);
+        logger.info(
+          `Upscaled image saved to local file: ${outputImagePath} on attempt ${attempt}`
+        );
+
+        return outputImagePath;
+      } catch (error) {
+        lastError = error;
+        logger.error(
+          `Image upscaling failed on attempt ${attempt}:`,
+          error.message
+        );
+
+        if (attempt < maxRetries) {
+          const delay = Math.pow(2, attempt - 1) * 1000; // 1s, 2s, 4s
+          logger.info(`Retrying upscaling in ${delay}ms...`);
+          await new Promise((resolve) => setTimeout(resolve, delay));
+        }
+      }
+    }
+
+    logger.error(`Image upscaling failed after ${maxRetries} attempts`);
+    throw new Error(
+      `Failed to upscale image after ${maxRetries} attempts: ${lastError.message}`
+    );
+  }
+
+  /**
+   * Generate and upscale illustration using Replicate
+   */
+  async generateAndUpscaleIllustration(
+    prompt,
+    inputImages,
+    seed,
+    localImagePath
+  ) {
+    // Create temporary path for the original image
+    const tempOriginalPath = localImagePath.replace(".jpg", "_original.jpg");
+
+    try {
+      // Generate the original illustration
+      await this.generateIllustration(
+        prompt,
+        inputImages,
+        seed,
+        tempOriginalPath
+      );
+
+      // Upscale the generated image
+      await this.upscaleImage(tempOriginalPath, localImagePath);
+
+      // Clean up the temporary original image
+      if (fs.existsSync(tempOriginalPath)) {
+        await fs.promises.unlink(tempOriginalPath);
+      }
+
+      logger.info(
+        `Successfully generated and upscaled illustration: ${localImagePath}`
+      );
+      return localImagePath;
+    } catch (error) {
+      // Clean up temporary file on error
+      if (fs.existsSync(tempOriginalPath)) {
+        try {
+          await fs.promises.unlink(tempOriginalPath);
+        } catch (cleanupError) {
+          logger.warn(
+            `Failed to cleanup temporary file ${tempOriginalPath}:`,
+            cleanupError.message
+          );
+        }
+      }
+      throw error;
+    }
+  }
+
+  /**
    * Extract input images from characters
    * @param {Array} characters - Array of character objects
    * @returns {Array} - Array of character reference image URLs
@@ -188,8 +291,8 @@ class IllustrationService {
         fs.mkdirSync(tempDir, { recursive: true });
       }
 
-      // Generate image and save to local file
-      const localImagePath = await this.generateIllustration(
+      // Generate and upscale image and save to local file
+      const localImagePath = await this.generateAndUpscaleIllustration(
         prompt,
         inputImages,
         seed,
@@ -308,8 +411,8 @@ class IllustrationService {
         fs.mkdirSync(tempDir, { recursive: true });
       }
 
-      // Generate image and save to local file
-      const localImagePath = await this.generateIllustration(
+      // Generate and upscale image and save to local file
+      const localImagePath = await this.generateAndUpscaleIllustration(
         prompt,
         inputImages,
         seed,
@@ -425,8 +528,8 @@ class IllustrationService {
         fs.mkdirSync(tempDir, { recursive: true });
       }
 
-      // Generate image and save to local file
-      const localImagePath = await this.generateIllustration(
+      // Generate and upscale image and save to local file
+      const localImagePath = await this.generateAndUpscaleIllustration(
         prompt,
         inputImages,
         seed,
