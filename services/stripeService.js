@@ -60,8 +60,16 @@ class StripeService {
             price_data: {
               currency: "usd",
               product_data: {
-                name: `${creditAmount} PetTalesAI Credits`,
-                description: `Purchase ${creditAmount} credits for creating AI-generated children's books`,
+                name:
+                  context === "pdf-download"
+                    ? "Public PDF Download (Charity Donation)"
+                    : `${creditAmount} PetTalesAI Credits`,
+                description:
+                  context === "pdf-download"
+                    ? `Donate $${(priceInCents / 100).toFixed(2)} to ${
+                        metadata.charityName
+                      } and access the PDF`
+                    : `Purchase ${creditAmount} credits for creating AI-generated children's books`,
               },
               unit_amount: priceInCents,
             },
@@ -79,6 +87,8 @@ class StripeService {
           context: context,
           ...(metadata.bookId && { book_id: metadata.bookId }),
           ...(metadata.returnUrl && { return_url: metadata.returnUrl }),
+          ...(metadata.charityId && { charity_id: metadata.charityId }),
+          ...(metadata.charityName && { charity_name: metadata.charityName }),
         },
         payment_intent_data: {
           metadata: {
@@ -88,6 +98,8 @@ class StripeService {
               context === "pdf-download" ? "pdf_download" : "credit_purchase",
             context: context,
             ...(metadata.bookId && { book_id: metadata.bookId }),
+            ...(metadata.charityId && { charity_id: metadata.charityId }),
+            ...(metadata.charityName && { charity_name: metadata.charityName }),
           },
         },
       });

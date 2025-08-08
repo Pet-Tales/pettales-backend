@@ -86,6 +86,13 @@ const userSchema = new mongoose.Schema(
       enum: ["active", "suspended", "deleted"],
       default: "active",
     },
+    // Admin role support
+    role: {
+      type: String,
+      enum: ["user", "admin"],
+      default: "user",
+      index: true,
+    },
     deleted_at: {
       type: Date,
       default: null,

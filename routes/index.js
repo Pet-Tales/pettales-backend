@@ -11,6 +11,7 @@ const illustrationRoutes = require("./illustrationRoutes");
 const creditRoutes = require("./credit");
 const contactRoutes = require("./contact");
 const printOrderRoutes = require("./printOrder");
+const charityRoutes = require("./charity");
 
 const router = express.Router();
 
@@ -49,5 +50,8 @@ router.use("/webhook", webhookRoutes);
 
 // Admin webhook management routes
 router.use("/admin/webhooks", webhookManagementRoutes);
+
+// Charity routes (public + admin)
+router.use("/charities", charityRoutes);
 
 module.exports = router;
