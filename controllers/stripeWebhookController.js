@@ -57,26 +57,59 @@ const handleCheckoutSessionCompleted = async (session) => {
       session.metadata?.type !== "credit_purchase" &&
       session.metadata?.type !== "pdf_download"
     ) {
-      logger.info(`Ignoring non-credit purchase session: ${session.id}`);
+      logger.info(`Ignoring unrelated session: ${session.id}`);
       return;
     }
 
     const userId = session.metadata.user_id;
-    const creditAmount = parseInt(session.metadata.credit_amount);
     const sessionType = session.metadata.type;
 
-    if (!userId || !creditAmount) {
+    if (!userId) {
       logger.error(
-        `Invalid session metadata: ${JSON.stringify(session.metadata)}`
+        `Invalid session metadata (missing user_id): ${JSON.stringify(
+          session.metadata
+        )}`
       );
       return;
     }
 
-    // For PDF downloads (both guests and authenticated users), we don't need to add credits
-    // The payment success is handled by the frontend redirect and session verification
+    // For PDF downloads (both guests and authenticated users), record the donation
     if (sessionType === "pdf_download") {
-      logger.info(
-        `PDF download payment completed for session: ${session.id} (user: ${userId})`
+      try {
+        const { CharityDonation } = require("../models");
+        // Upsert donation by session
+        const update = {
+          status: session.payment_status === "paid" ? "paid" : "failed",
+          stripe_payment_intent_id: session.payment_intent,
+          amount_cents: session.amount_total || 100,
+          currency: session.currency || "usd",
+        };
+        const base = {
+          book_id: session.metadata.book_id,
+          user_id: userId.startsWith("guest_") ? null : userId,
+          guest_email: session.customer_details?.email || null,
+          charity_id: session.metadata.charity_id,
+          stripe_session_id: session.id,
+        };
+        await CharityDonation.findOneAndUpdate(
+          { stripe_session_id: session.id },
+          { $setOnInsert: base, $set: update },
+          { upsert: true, new: true }
+        );
+        logger.info(
+          `PDF donation recorded for session: ${session.id}, charity: ${session.metadata.charity_id}`
+        );
+      } catch (e) {
+        logger.error(`Failed to record charity donation: ${e.message}`);
+      }
+      return;
+    }
+
+    // Credit purchase path
+    const creditAmount = parseInt(session.metadata.credit_amount);
+    if (!creditAmount) {
+      logger.error(
+        `Invalid credit purchase metadata: ${JSON.stringify(session.metadata)}`
       );
       return;
     }

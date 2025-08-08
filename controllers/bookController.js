@@ -633,6 +633,21 @@ const downloadPDF = async (req, res) => {
     }
 
     // No valid session - redirect to Stripe checkout (same flow for both guests and authenticated users)
+    // Charity selection logic: if any enabled charities exist, require charity_id before creating checkout
+    const { Charity } = require("../models");
+    const enabledCount = await Charity.countDocuments({ is_enabled: true });
+    const charityId = req.query.charity_id;
+
+    if (enabledCount > 0 && !charityId) {
+      return res.json({
+        success: true,
+        requiresPayment: true,
+        charityRequired: true,
+        message: "Charity selection required before payment",
+      });
+    }
+
+    // Build user and stripe checkout
     let checkoutUserId, userEmail;
 
     if (userId) {
@@ -654,6 +669,24 @@ const downloadPDF = async (req, res) => {
     }
 
     try {
+      // If charityId is present, validate it and include metadata
+      let charityMeta = {};
+      if (charityId) {
+        const charity = await Charity.findOne({
+          _id: charityId,
+          is_enabled: true,
+        });
+        if (!charity) {
+          return res
+            .status(400)
+            .json({ success: false, message: "Invalid charity selection" });
+        }
+        charityMeta = {
+          charityId: charity._id.toString(),
+          charityName: charity.name,
+        };
+      }
+
       const session = await stripeService.createCreditPurchaseSession(
         checkoutUserId,
         CREDIT_COSTS.PDF_DOWNLOAD,
@@ -662,6 +695,7 @@ const downloadPDF = async (req, res) => {
         {
           bookId: id,
           returnUrl: `/books/${id}`,
+          ...charityMeta,
         }
       );
 
