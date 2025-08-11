@@ -100,6 +100,7 @@ const getProfile = async (req, res) => {
           preferredLanguage: req.user.preferred_language,
           createdAt: req.user.created_at,
           hasPassword: !!req.user.password_hash, // Indicate if user has a password
+          role: req.user.role,
         },
       },
     });
