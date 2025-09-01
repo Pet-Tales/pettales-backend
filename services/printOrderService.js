@@ -152,15 +152,12 @@ class PrintOrderService {
         );
       }
 
-      // Generate print-ready PDFs
-      const pdfUrls = await this.generatePrintReadyPDFs(bookId);
-
       // Generate external ID for the print order
       const timestamp = Date.now();
       const random = Math.random().toString(36).substring(2, 8).toUpperCase();
       const externalId = `PTO_${timestamp}_${random}`;
 
-      // Create print order
+      // Create print order first to get the order ID
       const printOrder = new PrintOrder({
         user_id: userId,
         book_id: bookId,
@@ -171,10 +168,18 @@ class PrintOrderService {
         markup_percentage: costData.markup_percentage,
         shipping_address: shippingAddress,
         shipping_level: shippingLevel,
-        cover_pdf_url: pdfUrls.coverPdfUrl,
-        interior_pdf_url: pdfUrls.interiorPdfUrl,
         status: "created",
       });
+
+      // Save the order within the session to get the MongoDB _id
+      await printOrder.save({ session });
+
+      // Generate print-ready PDFs with the order ID
+      const pdfUrls = await this.generatePrintReadyPDFs(bookId, userId, printOrder._id.toString());
+
+      // Update the order with PDF URLs
+      printOrder.cover_pdf_url = pdfUrls.coverPdfUrl;
+      printOrder.interior_pdf_url = pdfUrls.interiorPdfUrl;
 
       await printOrder.save({ session });
 
@@ -250,15 +255,17 @@ class PrintOrderService {
   /**
    * Generate print-ready PDFs for a book
    */
-  async generatePrintReadyPDFs(bookId) {
+  async generatePrintReadyPDFs(bookId, userId, orderId) {
     try {
       logger.info(`Generating print-ready PDFs for book ${bookId}`);
 
       // Use the dedicated print-ready PDF service
-      const pdfUrls = await printReadyPDFService.generatePrintReadyPDFs(bookId);
+      const pdfUrls = await printReadyPDFService.generatePrintReadyPDFs(bookId, userId, orderId);
 
       logger.info("Print-ready PDFs generated successfully", {
         bookId,
+        userId,
+        orderId,
         coverPdfUrl: pdfUrls.coverPdfUrl,
         interiorPdfUrl: pdfUrls.interiorPdfUrl,
       });

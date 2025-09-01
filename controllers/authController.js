@@ -180,6 +180,7 @@ const login = async (req, res) => {
           creditsBalance: user.credits_balance,
           preferredLanguage: user.preferred_language,
           hasPassword: !!user.password_hash, // Indicate if user has a password
+          role: user.role,
         },
       },
     });
@@ -432,6 +433,7 @@ const getCurrentUser = async (req, res) => {
           creditsBalance: req.user.credits_balance,
           preferredLanguage: req.user.preferred_language,
           hasPassword: !!req.user.password_hash, // Indicate if user has a password
+          role: req.user.role,
         },
       },
     });
