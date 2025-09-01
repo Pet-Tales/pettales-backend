@@ -69,7 +69,7 @@ app.use("/api", routes);
 
 app.get("/health", (req, res) => {
   const environment = DEBUG_MODE ? "Staging" : "Production";
-  const message = `Hello, World! - ${environment} Environment`;
+  const message = `Greetings from PetTalesAI! - ${environment} Environment`;
   logger.info(`Health check accessed from ${req.ip}`);
   res.send(message);
 });
