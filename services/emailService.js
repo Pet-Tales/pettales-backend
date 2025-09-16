@@ -304,20 +304,7 @@ const sendContactForm = async (
   language = "en"
 ) => {
   // Check if contact email is configured
-  if (!CONTACT_EMAIL_ADDRESS) {
-    logger.warn(
-      "Contact email address not configured. Skipping contact form email.",
-      {
-        name,
-        email,
-        subject,
-      }
-    );
-    return {
-      success: false,
-      message: "Contact email not configured",
-    };
-  }
+  const contactAddress = CONTACT_EMAIL_ADDRESS || "arlo@pettales.ai";
 
   const template = getEmailTemplate(language, "contactForm", {
     name,
@@ -331,7 +318,7 @@ const sendContactForm = async (
   const params = {
     Source: `"${FROM_NAME}" <${NO_REPLY_EMAIL_ADDRESS}>`,
     Destination: {
-      ToAddresses: [CONTACT_EMAIL_ADDRESS],
+      ToAddresses: [contactAddress],
     },
     ReplyToAddresses: [email], // This allows direct replies to the user
     Message: {
