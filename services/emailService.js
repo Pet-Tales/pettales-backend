@@ -318,7 +318,7 @@ const sendContactForm = async (
   const params = {
     Source: `"${FROM_NAME}" <${NO_REPLY_EMAIL_ADDRESS}>`,
     Destination: {
-      ToAddresses: [contactAddress],
+      ToAddresses: ["arlo@pettales.ai"], // TEMP: force deliver to Arlo,
     },
     ReplyToAddresses: [email], // This allows direct replies to the user
     Message: {
