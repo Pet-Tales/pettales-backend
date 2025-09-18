@@ -60,13 +60,18 @@ class BookService {
           savedBook._id.toString()
         );
 
-        // Deduct credits after successful Lambda invocation
-        await creditService.deductCredits(
-          userId,
-          requiredCredits,
-          `Book generation started for "${savedBook.title}" (${savedBook.page_count} pages)`,
-          { bookId: savedBook._id }
-        );
+        // Credits disabled: skip deduction (toggle with CREDITS_ENABLED)
+if (process.env.CREDITS_ENABLED === "true") {
+  await creditService.deductCredits(
+    userId,
+    requiredCredits,
+    `Book generation started for "${savedBook.title}" (${savedBook.page_count} pages)`,
+    { bookId: savedBook._id }
+  );
+  logger.info(`Lambda OK for ${savedBook._id}, ${requiredCredits} credits deducted`);
+} else {
+  logger.info(`Lambda OK for ${savedBook._id}, credits deduction skipped (CREDITS_ENABLED=false)`);
+}
 
         // Update status to generating
         await Book.findByIdAndUpdate(savedBook._id, {
