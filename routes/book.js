@@ -130,8 +130,8 @@ router.post(
   "/",
   requireAuth,
   createBookValidation,
-  validateBookGenerationCredits,
   bookController.createBook
+);
 );
 
 // Get user's books with pagination
