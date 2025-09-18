@@ -60,7 +60,7 @@ class BookService {
           savedBook._id.toString()
         );
 
-        // Credits disabled: skip deduction (toggle with CREDITS_ENABLED)
+        // Deduct credits only if explicitly enabled
 if (process.env.CREDITS_ENABLED === "true") {
   await creditService.deductCredits(
     userId,
@@ -68,11 +68,7 @@ if (process.env.CREDITS_ENABLED === "true") {
     `Book generation started for "${savedBook.title}" (${savedBook.page_count} pages)`,
     { bookId: savedBook._id }
   );
-  logger.info(`Lambda OK for ${savedBook._id}, ${requiredCredits} credits deducted`);
-} else {
-  logger.info(`Lambda OK for ${savedBook._id}, credits deduction skipped (CREDITS_ENABLED=false)`);
 }
-
         // Update status to generating
         await Book.findByIdAndUpdate(savedBook._id, {
           generation_status: "generating",
