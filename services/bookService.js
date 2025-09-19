@@ -2,7 +2,6 @@ const mongoose = require("mongoose");
 const { Book, Page, Character } = require("../models");
 const s3Service = require("./s3Service");
 const LambdaService = require("./lambdaService");
-const creditService = require("./creditService");
 const logger = require("../utils/logger");
 
 class BookService {
@@ -10,14 +9,13 @@ class BookService {
     this.lambdaService = new LambdaService();
   }
 
-  /**
-   * Create a new book and trigger generation
+/**
+   * Create a new book and trigger generation (FREE - no credits)
    * @param {string} userId - User ID
    * @param {Object} bookData - Book creation data
-   * @param {number} requiredCredits - Credits required for generation
    * @returns {Promise<Object>} - Created book
    */
-  async createBook(userId, bookData, requiredCredits) {
+  async createBook(userId, bookData) {  // REMOVED requiredCredits parameter
     try {
       // Validate that all characters belong to the user
       const characterIds = bookData.character_ids || bookData.characterIds;
@@ -60,13 +58,8 @@ class BookService {
           savedBook._id.toString()
         );
 
-        // Deduct credits after successful Lambda invocation
-        await creditService.deductCredits(
-          userId,
-          requiredCredits,
-          `Book generation started for "${savedBook.title}" (${savedBook.page_count} pages)`,
-          { bookId: savedBook._id }
-        );
+        // REMOVED: Credit deduction logic
+        // Book generation is now FREE
 
         // Update status to generating
         await Book.findByIdAndUpdate(savedBook._id, {
@@ -74,7 +67,7 @@ class BookService {
         });
 
         logger.info(
-          `Lambda invocation successful for book: ${savedBook._id}, ${requiredCredits} credits deducted`
+          `Lambda invocation successful for book: ${savedBook._id} (FREE generation)`
         );
       } catch (lambdaError) {
         // Update status to failed if Lambda invocation fails
@@ -86,7 +79,7 @@ class BookService {
           lambdaError
         );
         // Don't throw error here - book is created but generation failed
-        // No credits are deducted since generation didn't start
+        // No credits involved since generation is now free
       }
 
       return savedBook;
