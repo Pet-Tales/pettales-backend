@@ -71,7 +71,6 @@ const createPrintOrder = async (req, res) => {
       data: {
         printOrder: result.printOrder,
         costData: result.costData,
-        newCreditBalance: result.newCreditBalance,
       },
     });
   } catch (error) {
