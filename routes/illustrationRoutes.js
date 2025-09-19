@@ -6,9 +6,6 @@ const {
   regeneratePageIllustration,
 } = require("../controllers/illustrationController");
 const { requireAuth } = require("../middleware");
-const {
-  validateRegenerationCredits,
-} = require("../middleware/creditMiddleware");
 
 /**
  * @route POST /api/illustrations/regenerate/front-cover/:bookId
@@ -18,7 +15,6 @@ const {
 router.post(
   "/regenerate/front-cover/:bookId",
   requireAuth,
-  validateRegenerationCredits,
   regenerateFrontCover
 );
 
@@ -30,7 +26,6 @@ router.post(
 router.post(
   "/regenerate/back-cover/:bookId",
   requireAuth,
-  validateRegenerationCredits,
   regenerateBackCover
 );
 
@@ -42,7 +37,6 @@ router.post(
 router.post(
   "/regenerate/page/:pageId",
   requireAuth,
-  validateRegenerationCredits,
   regeneratePageIllustration
 );
 
