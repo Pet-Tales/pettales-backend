@@ -2,10 +2,6 @@ const express = require("express");
 const { body, param, query } = require("express-validator");
 const { bookController } = require("../controllers");
 const { requireAuth } = require("../middleware");
-const {
-  validateBookGenerationCredits,
-} = require("../middleware/creditMiddleware");
-
 const router = express.Router();
 
 // Validation rules
@@ -130,7 +126,6 @@ router.post(
   "/",
   requireAuth,
   createBookValidation,
-  validateBookGenerationCredits,
   bookController.createBook
 );
 
