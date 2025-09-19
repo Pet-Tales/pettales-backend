@@ -1,7 +1,6 @@
 const stripeService = require("../services/stripeService");
 const bookPurchaseService = require("../services/bookPurchaseService");
 const logger = require("../utils/logger");
-const logger = require("../utils/logger");
 
 /**
  * Handle Stripe webhook events
