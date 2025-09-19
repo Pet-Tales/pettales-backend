@@ -9,11 +9,11 @@ class BookPurchaseService {
    */
   getDownloadPrice(pageCount) {
     const prices = {
-      12: parseInt(process.env.DOWNLOAD_PRICE_12_PAGES || 499),
-      16: parseInt(process.env.DOWNLOAD_PRICE_16_PAGES || 699),
-      24: parseInt(process.env.DOWNLOAD_PRICE_24_PAGES || 999),
+      12: parseInt(process.env.DOWNLOAD_PRICE_12_PAGES || 299),
+      16: parseInt(process.env.DOWNLOAD_PRICE_16_PAGES || 399),
+      24: parseInt(process.env.DOWNLOAD_PRICE_24_PAGES || 499),
     };
-    return prices[pageCount] || 499;
+    return prices[pageCount] || 299;
   }
 
   /**
