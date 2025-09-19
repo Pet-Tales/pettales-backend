@@ -7,6 +7,7 @@ const CreditTransaction = require("./CreditTransaction");
 const PrintOrder = require("./PrintOrder");
 const Charity = require("./Charity");
 const CharityDonation = require("./CharityDonation");
+const BookPurchase = require("./BookPurchase");
 
 module.exports = {
   User,
@@ -18,4 +19,5 @@ module.exports = {
   PrintOrder,
   Charity,
   CharityDonation,
+  BookPurchase,
 };
