@@ -2,7 +2,7 @@ const { validationResult } = require("express-validator");
 const mongoose = require("mongoose");
 const BookService = require("../services/bookService");
 const { pdfRegenerationService } = require("../services/pdfService");
-const bookPurchaseService = require("../services/bookPurchaseService");
+const creditService = require("../services/creditService");
 const stripeService = require("../services/stripeService");
 const logger = require("../utils/logger");
 const https = require("https");
@@ -17,6 +17,7 @@ const bookService = new BookService();
  */
 const createBook = async (req, res) => {
   try {
+    // Check for validation errors
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       return res.status(400).json({
@@ -28,33 +29,23 @@ const createBook = async (req, res) => {
 
     const userId = req.user._id.toString();
     const bookData = req.body;
-    
-    // Check rate limiting for free generation
-    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
-    const recentBooksCount = await Book.countDocuments({
-      user_id: userId,
-      created_at: { $gt: oneHourAgo },
-    });
+    const requiredCredits = req.requiredCredits; // Set by credit validation middleware
 
-    const hourlyLimit = parseInt(process.env.HOURLY_GENERATION_LIMIT || 3);
-    if (recentBooksCount >= hourlyLimit) {
-      return res.status(429).json({
-        success: false,
-        message: `Generation limit reached (${hourlyLimit} per hour). Please try again later.`,
-      });
-    }
-
-    // Create book WITHOUT credit deduction
-    const book = await bookService.createBook(userId, bookData);
+    // Create book and handle credit deduction
+    const book = await bookService.createBook(
+      userId,
+      bookData,
+      requiredCredits
+    );
 
     res.status(201).json({
       success: true,
-      message: "Book created successfully! Generation is FREE.",
+      message: "Book created successfully",
       data: { book },
     });
   } catch (error) {
     logger.error(`Create book error: ${error.message}`);
-    
+
     // Handle specific errors
     if (error.message.includes("characters not found")) {
       return res.status(400).json({
@@ -63,12 +54,24 @@ const createBook = async (req, res) => {
       });
     }
 
-    res.status(500).json({
-      success: false,
-      message: "Failed to create book",
-    });
-  }
-};
+    if (error.message.includes("At least one character")) {
+      return res.status(400).json({
+        success: false,
+        message: "At least one character is required",
+      });
+    }
+
+    // Handle validation errors
+    if (error.name === "ValidationError") {
+      return res.status(400).json({
+        success: false,
+        message: "Validation failed",
+        errors: Object.values(error.errors).map((err) => ({
+          field: err.path,
+          message: err.message,
+        })),
+      });
+    }
 
     res.status(500).json({
       success: false,
