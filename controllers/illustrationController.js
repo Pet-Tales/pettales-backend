@@ -1,5 +1,4 @@
 const illustrationService = require("../services/illustrationService");
-const creditService = require("../services/creditService");
 const { Book } = require("../models");
 const logger = require("../utils/logger");
 
@@ -12,21 +11,8 @@ const regenerateFrontCover = async (req, res) => {
   try {
     const { bookId } = req.params;
     const userId = req.user.id;
-    const isFreeRegeneration = req.isFreeRegeneration;
-    const requiredCredits = req.requiredCredits;
-    const book = req.book;
 
     logger.info(`User ${userId} regenerating front cover for book ${bookId}`);
-
-    // Deduct credits if not a free regeneration
-    if (!isFreeRegeneration) {
-      await creditService.deductCredits(
-        userId,
-        requiredCredits,
-        `Front cover regeneration for "${book.title}"`,
-        { bookId: book._id }
-      );
-    }
 
     // Increment regeneration counter
     await Book.findByIdAndUpdate(bookId, {
@@ -46,32 +32,11 @@ const regenerateFrontCover = async (req, res) => {
       message: "Front cover regenerated successfully",
       data: {
         newImageUrl,
-        isFreeRegeneration,
-        creditsUsed: isFreeRegeneration ? 0 : requiredCredits,
-        regenerationsUsed: (book.regenerations_used || 0) + 1,
+        regenerationsUsed: 1,
       },
     });
   } catch (error) {
     logger.error("Regenerate front cover error:", error);
-
-    // Refund credits if they were deducted and regeneration failed
-    if (!req.isFreeRegeneration && req.requiredCredits) {
-      try {
-        await creditService.refundCredits(
-          req.user.id,
-          req.requiredCredits,
-          `Refund for failed front cover regeneration: "${
-            req.book?.title || "Unknown"
-          }"`,
-          { bookId: req.params.bookId }
-        );
-        logger.info(
-          `Refunded ${req.requiredCredits} credits for failed front cover regeneration`
-        );
-      } catch (refundError) {
-        logger.error("Failed to refund credits:", refundError);
-      }
-    }
 
     // Clean up temporary files on error
     try {
@@ -112,21 +77,8 @@ const regenerateBackCover = async (req, res) => {
   try {
     const { bookId } = req.params;
     const userId = req.user.id;
-    const isFreeRegeneration = req.isFreeRegeneration;
-    const requiredCredits = req.requiredCredits;
-    const book = req.book;
 
     logger.info(`User ${userId} regenerating back cover for book ${bookId}`);
-
-    // Deduct credits if not a free regeneration
-    if (!isFreeRegeneration) {
-      await creditService.deductCredits(
-        userId,
-        requiredCredits,
-        `Back cover regeneration for "${book.title}"`,
-        { bookId: book._id }
-      );
-    }
 
     // Increment regeneration counter
     await Book.findByIdAndUpdate(bookId, {
@@ -146,32 +98,11 @@ const regenerateBackCover = async (req, res) => {
       message: "Back cover regenerated successfully",
       data: {
         newImageUrl,
-        isFreeRegeneration,
-        creditsUsed: isFreeRegeneration ? 0 : requiredCredits,
-        regenerationsUsed: (book.regenerations_used || 0) + 1,
+        regenerationsUsed: 1,
       },
     });
   } catch (error) {
     logger.error("Regenerate back cover error:", error);
-
-    // Refund credits if they were deducted and regeneration failed
-    if (!req.isFreeRegeneration && req.requiredCredits) {
-      try {
-        await creditService.refundCredits(
-          req.user.id,
-          req.requiredCredits,
-          `Refund for failed back cover regeneration: "${
-            req.book?.title || "Unknown"
-          }"`,
-          { bookId: req.params.bookId }
-        );
-        logger.info(
-          `Refunded ${req.requiredCredits} credits for failed back cover regeneration`
-        );
-      } catch (refundError) {
-        logger.error("Failed to refund credits:", refundError);
-      }
-    }
 
     // Clean up temporary files on error
     try {
@@ -212,29 +143,13 @@ const regeneratePageIllustration = async (req, res) => {
   try {
     const { pageId } = req.params;
     const userId = req.user.id;
-    const isFreeRegeneration = req.isFreeRegeneration;
-    const requiredCredits = req.requiredCredits;
-    const book = req.book;
 
     logger.info(
       `User ${userId} regenerating page illustration for page ${pageId}`
     );
 
-    // Deduct credits if not a free regeneration
-    if (!isFreeRegeneration) {
-      await creditService.deductCredits(
-        userId,
-        requiredCredits,
-        `Page illustration regeneration for "${book.title}"`,
-        { bookId: book._id }
-      );
-    }
-
-    // Increment regeneration counter
-    await Book.findByIdAndUpdate(book._id, {
-      $inc: { regenerations_used: 1 },
-    });
-
+    // Note: For page regeneration, we need to find the book ID differently
+    // The illustrationService should handle this internally
     const newImageUrl = await illustrationService.regeneratePageIllustration(
       pageId,
       userId
@@ -248,32 +163,10 @@ const regeneratePageIllustration = async (req, res) => {
       message: "Page illustration regenerated successfully",
       data: {
         newImageUrl,
-        isFreeRegeneration,
-        creditsUsed: isFreeRegeneration ? 0 : requiredCredits,
-        regenerationsUsed: (book.regenerations_used || 0) + 1,
       },
     });
   } catch (error) {
     logger.error("Regenerate page illustration error:", error);
-
-    // Refund credits if they were deducted and regeneration failed
-    if (!req.isFreeRegeneration && req.requiredCredits) {
-      try {
-        await creditService.refundCredits(
-          req.user.id,
-          req.requiredCredits,
-          `Refund for failed page illustration regeneration: "${
-            req.book?.title || "Unknown"
-          }"`,
-          { bookId: req.book?._id }
-        );
-        logger.info(
-          `Refunded ${req.requiredCredits} credits for failed page illustration regeneration`
-        );
-      } catch (refundError) {
-        logger.error("Failed to refund credits:", refundError);
-      }
-    }
 
     // Clean up temporary files on error
     try {
