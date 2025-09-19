@@ -803,4 +803,6 @@ module.exports = {
   regeneratePDF,
   checkPDFStatus,
   downloadPDF,
+  createDownloadCheckout,
+  getDownloadUrl,
 };
