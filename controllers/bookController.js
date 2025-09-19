@@ -70,6 +70,13 @@ const createBook = async (req, res) => {
   }
 };
 
+    res.status(500).json({
+      success: false,
+      message: "Failed to create book",
+    });
+  }
+};
+
 /**
  * Get user's books with pagination
  */
