@@ -186,5 +186,18 @@ router.get(
 
 // Download PDF for a book (handles CORS issues)
 router.get("/:id/download-pdf", mongoIdValidation, bookController.downloadPDF);
+// Create download checkout session
+router.post(
+  "/:id/purchase-download",
+  mongoIdValidation,
+  bookController.createDownloadCheckout
+);
+
+// Get download URL after purchase
+router.get(
+  "/:id/download-url",
+  mongoIdValidation,
+  bookController.getDownloadUrl
+);
 
 module.exports = router;
