@@ -42,6 +42,18 @@ const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY;
 const STRIPE_PUBLIC_KEY = process.env.STRIPE_PUBLIC_KEY;
 const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET;
 
+// Stripe Product IDs for downloads
+const STRIPE_PRODUCT_DOWNLOAD_12 = process.env.STRIPE_PRODUCT_DOWNLOAD_12 || "prod_T61vvxbhYQfK2T";
+const STRIPE_PRODUCT_DOWNLOAD_16 = process.env.STRIPE_PRODUCT_DOWNLOAD_16 || "prod_T61veXbua1EvzB";
+const STRIPE_PRODUCT_DOWNLOAD_24 = process.env.STRIPE_PRODUCT_DOWNLOAD_24 || "prod_T61vZIRlug7MgB";
+
+// Download Pricing (in cents - for display/reference only, actual prices are in Stripe)
+const DOWNLOAD_PRICES = {
+  12: 299,  // $2.99
+  16: 399,  // $3.99
+  24: 499,  // $4.99
+};
+
 // Webhook Configuration
 const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET;
 
@@ -80,28 +92,30 @@ const ILLUST_CLASSIC_WATERCOLOR =
   "https://storage-staging.pettales.ai/_static/illustration_styles/illust_classic_watercolor_1.jpg";
 
 // Application Constants
-const DEFAULT_CREDITS_BALANCE = 10;
+const DEFAULT_CREDITS_BALANCE = 10;  // DEPRECATED - keeping for migration reference only
 const SESSION_EXPIRY_DAYS = 7;
 const EMAIL_VERIFICATION_EXPIRY_HOURS = 24;
 const PASSWORD_RESET_EXPIRY_HOURS = 1;
 
-// Credit System Constants
-const CREDIT_COSTS = {
-  BOOK_12_PAGES: 400,
-  BOOK_16_PAGES: 450,
-  BOOK_24_PAGES: 500,
-  ILLUSTRATION_REGENERATION: 16,
-  PDF_DOWNLOAD: 100, // $1.00 for public book PDF downloads
-};
+// DEPRECATED - Credit System Constants (removed but kept commented for reference during migration)
+// const CREDIT_COSTS = {
+//   BOOK_12_PAGES: 400,
+//   BOOK_16_PAGES: 450,
+//   BOOK_24_PAGES: 500,
+//   ILLUSTRATION_REGENERATION: 16,
+//   PDF_DOWNLOAD: 100,
+// };
+// const FREE_REGENERATION_LIMITS = {
+//   12: 3,
+//   16: 4,
+//   24: 5,
+// };
+// const CREDIT_VALUE_USD = 0.01;
+// const LOW_CREDIT_THRESHOLD = 100;
 
-const FREE_REGENERATION_LIMITS = {
-  12: 3, // 12-page book: 3 free regenerations
-  16: 4, // 16-page book: 4 free regenerations
-  24: 5, // 24-page book: 5 free regenerations
-};
-
-const CREDIT_VALUE_USD = 0.01; // 1 credit = $0.01
-const LOW_CREDIT_THRESHOLD = 100;
+// Print Markup Configuration (for Lulu print orders)
+const PRINT_MARKUP_PERCENTAGE = parseFloat(process.env.PRINT_MARKUP_PERCENTAGE || "30"); // 30% default markup
+const SHIPPING_MARKUP_PERCENTAGE = parseFloat(process.env.SHIPPING_MARKUP_PERCENTAGE || "10"); // 10% shipping markup
 
 // Determine if we're in local development (not staging or production)
 const IS_LOCAL_DEV =
@@ -225,6 +239,12 @@ module.exports = {
   STRIPE_SECRET_KEY,
   STRIPE_PUBLIC_KEY,
   STRIPE_WEBHOOK_SECRET,
+  STRIPE_PRODUCT_DOWNLOAD_12,
+  STRIPE_PRODUCT_DOWNLOAD_16,
+  STRIPE_PRODUCT_DOWNLOAD_24,
+
+  // Download Pricing
+  DOWNLOAD_PRICES,
 
   // Webhook
   WEBHOOK_SECRET,
@@ -253,16 +273,14 @@ module.exports = {
   ILLUST_CLASSIC_WATERCOLOR,
 
   // Application Constants
-  DEFAULT_CREDITS_BALANCE,
+  DEFAULT_CREDITS_BALANCE,  // DEPRECATED
   SESSION_EXPIRY_DAYS,
   EMAIL_VERIFICATION_EXPIRY_HOURS,
   PASSWORD_RESET_EXPIRY_HOURS,
 
-  // Credit System Constants
-  CREDIT_COSTS,
-  FREE_REGENERATION_LIMITS,
-  CREDIT_VALUE_USD,
-  LOW_CREDIT_THRESHOLD,
+  // Print Configuration
+  PRINT_MARKUP_PERCENTAGE,
+  SHIPPING_MARKUP_PERCENTAGE,
 
   // Cookie Configuration
   COOKIE_OPTIONS,
