@@ -1,9 +1,5 @@
 const stripe = require("stripe");
-const {
-  STRIPE_SECRET_KEY,
-  WEB_URL,
-  CREDIT_VALUE_USD,
-} = require("../utils/constants");
+const { STRIPE_SECRET_KEY, WEB_URL } = require("../utils/constants");
 const logger = require("../utils/logger");
 
 // Initialize Stripe
@@ -11,45 +7,53 @@ const stripeClient = stripe(STRIPE_SECRET_KEY);
 
 class StripeService {
   /**
-   * Create a Stripe checkout session for credit purchase
+   * Create a generic Stripe checkout session (for book purchases)
    * @param {string} userId - User ID
-   * @param {number} creditAmount - Number of credits to purchase
+   * @param {number} priceInCents - Price in cents
    * @param {string} userEmail - User email for prefilling
-   * @param {string} context - Purchase context ('pricing', 'book-creation', or 'pdf-download')
+   * @param {string} context - Purchase context ('book-download', 'book-print', etc.)
    * @param {Object} metadata - Additional metadata for the session
    * @returns {Promise<Object>} - Stripe checkout session
    */
-  async createCreditPurchaseSession(
+  async createCheckoutSession(
     userId,
-    creditAmount,
+    priceInCents,
     userEmail,
-    context = "pricing",
+    context = "book-download",
     metadata = {}
   ) {
     try {
-      // Calculate price in cents (Stripe uses cents)
-      const priceInCents = Math.round(creditAmount * CREDIT_VALUE_USD * 100);
-
       logger.info(
-        `Creating checkout session: ${creditAmount} credits = $${
-          creditAmount * CREDIT_VALUE_USD
-        } = ${priceInCents} cents for context: ${context}`
+        `Creating checkout session: $${(priceInCents / 100).toFixed(
+          2
+        )} for context: ${context}`
       );
 
       // Determine URLs based on context
       let successUrl, cancelUrl;
-      if (context === "book-creation") {
-        successUrl = `${WEB_URL}/books/create?payment=success&session_id={CHECKOUT_SESSION_ID}`;
-        cancelUrl = `${WEB_URL}/books/create?payment=cancelled`;
-      } else if (context === "pdf-download") {
-        // For PDF downloads, redirect back to the book page with download trigger
-        const bookId = metadata.bookId;
-        const returnUrl = metadata.returnUrl || `/books/${bookId}`;
-        successUrl = `${WEB_URL}${returnUrl}?payment=success&download=pdf&session_id={CHECKOUT_SESSION_ID}`;
+      const bookId = metadata.bookId || metadata.book_id;
+      const returnUrl = metadata.returnUrl || `/books/${bookId}`;
+      
+      if (context === "book-download" || context === "book-print") {
+        successUrl = `${WEB_URL}${returnUrl}?payment=success&session_id={CHECKOUT_SESSION_ID}`;
         cancelUrl = `${WEB_URL}${returnUrl}?payment=cancelled`;
       } else {
-        successUrl = `${WEB_URL}/credits/success?session_id={CHECKOUT_SESSION_ID}`;
-        cancelUrl = `${WEB_URL}/pricing`;
+        // Fallback for any other context
+        successUrl = `${WEB_URL}/success?session_id={CHECKOUT_SESSION_ID}`;
+        cancelUrl = `${WEB_URL}/cancelled`;
+      }
+
+      // Determine product name based on context
+      let productName, productDescription;
+      if (context === "book-download") {
+        productName = `Digital Book Download (${metadata.page_count || 12} pages)`;
+        productDescription = "Instant PDF download of your personalized children's book";
+      } else if (context === "book-print") {
+        productName = `Print & Ship Book (${metadata.page_count || 12} pages)`;
+        productDescription = "Professional printed book shipped to your address (includes digital download)";
+      } else {
+        productName = "PetTalesAI Purchase";
+        productDescription = "Purchase from PetTalesAI";
       }
 
       // Create checkout session
@@ -60,16 +64,8 @@ class StripeService {
             price_data: {
               currency: "usd",
               product_data: {
-                name:
-                  context === "pdf-download"
-                    ? "Public PDF Download (Charity Donation)"
-                    : `${creditAmount} PetTalesAI Credits`,
-                description:
-                  context === "pdf-download"
-                    ? `Donate $${(priceInCents / 100).toFixed(2)} to ${
-                        metadata.charityName
-                      } and access the PDF`
-                    : `Purchase ${creditAmount} credits for creating AI-generated children's books`,
+                name: productName,
+                description: productDescription,
               },
               unit_amount: priceInCents,
             },
@@ -82,24 +78,14 @@ class StripeService {
         ...(userEmail && { customer_email: userEmail }),
         metadata: {
           user_id: userId,
-          credit_amount: creditAmount.toString(),
-          type: context === "pdf-download" ? "pdf_download" : "credit_purchase",
-          context: context,
-          ...(metadata.bookId && { book_id: metadata.bookId }),
-          ...(metadata.returnUrl && { return_url: metadata.returnUrl }),
-          ...(metadata.charityId && { charity_id: metadata.charityId }),
-          ...(metadata.charityName && { charity_name: metadata.charityName }),
+          type: context,
+          ...metadata,
         },
         payment_intent_data: {
           metadata: {
             user_id: userId,
-            credit_amount: creditAmount.toString(),
-            type:
-              context === "pdf-download" ? "pdf_download" : "credit_purchase",
-            context: context,
-            ...(metadata.bookId && { book_id: metadata.bookId }),
-            ...(metadata.charityId && { charity_id: metadata.charityId }),
-            ...(metadata.charityName && { charity_name: metadata.charityName }),
+            type: context,
+            ...metadata,
           },
         },
       });
@@ -172,7 +158,7 @@ class StripeService {
   }
 
   /**
-   * Retrieve a checkout session by ID
+   * Retrieve a checkout session by ID (alias for retrieveSession)
    * @param {string} sessionId - Stripe session ID
    * @returns {Promise<Object>} - Stripe session object
    */
@@ -187,7 +173,7 @@ class StripeService {
   }
 
   /**
-   * Check if a checkout session was completed successfully for PDF download
+   * Check if a checkout session was completed successfully for a book
    * @param {string} sessionId - Stripe session ID
    * @param {string} bookId - Book ID to verify
    * @returns {Promise<boolean>} - True if session was completed for this book
@@ -198,7 +184,9 @@ class StripeService {
 
       return (
         session.payment_status === "paid" &&
-        session.metadata?.type === "pdf_download" &&
+        (session.metadata?.type === "book-download" ||
+          session.metadata?.type === "book-print" ||
+          session.metadata?.type === "pdf_download") &&
         session.metadata?.book_id === bookId
       );
     } catch (error) {
