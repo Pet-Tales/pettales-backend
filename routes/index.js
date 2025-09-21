@@ -8,7 +8,7 @@ const webhookManagementRoutes = require("./webhookManagement");
 const pageRoutes = require("./page");
 const galleryRoutes = require("./gallery");
 const illustrationRoutes = require("./illustrationRoutes");
-const creditRoutes = require("./credit");
+// REMOVED: const creditRoutes = require("./credit");
 const contactRoutes = require("./contact");
 const printOrderRoutes = require("./printOrder");
 const charityRoutes = require("./charity");
@@ -36,8 +36,8 @@ router.use("/gallery", galleryRoutes);
 // Mount illustration routes
 router.use("/illustrations", illustrationRoutes);
 
-// Mount credit routes
-router.use("/credits", creditRoutes);
+// REMOVED: Mount credit routes
+// router.use("/credits", creditRoutes);
 
 // Mount contact routes (public, no auth required)
 router.use("/contact", contactRoutes);
