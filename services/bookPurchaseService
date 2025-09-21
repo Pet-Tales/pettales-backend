@@ -1,19 +1,14 @@
 const { Book, BookPurchase, Charity, CharityDonation } = require("../models");
 const stripeService = require("./stripeService");
 const logger = require("../utils/logger");
-const { WEB_URL } = require("../utils/constants");
+const { WEB_URL, DOWNLOAD_PRICES } = require("../utils/constants");
 
 class BookPurchaseService {
   /**
-   * Get price for book download based on page count
+   * Get price for book download based on page count (reference only)
    */
   getDownloadPrice(pageCount) {
-    const prices = {
-      12: parseInt(process.env.DOWNLOAD_PRICE_12_PAGES || 299),
-      16: parseInt(process.env.DOWNLOAD_PRICE_16_PAGES || 399),
-      24: parseInt(process.env.DOWNLOAD_PRICE_24_PAGES || 499),
-    };
-    return prices[pageCount] || 299;
+    return DOWNLOAD_PRICES[pageCount] || 299;
   }
 
   /**
@@ -30,7 +25,6 @@ class BookPurchaseService {
         throw new Error("Book generation not completed");
       }
 
-      const price = this.getDownloadPrice(book.page_count);
       const isOwner = userId && book.user_id.toString() === userId;
 
       // Check for charities if needed (keeping existing charity logic)
@@ -38,24 +32,18 @@ class BookPurchaseService {
       
       // Build metadata
       const metadata = {
-        type: "book_download",
-        book_id: bookId,
-        user_id: userId || `guest_${Date.now()}`,
         is_owner: isOwner.toString(),
         page_count: book.page_count.toString(),
+        returnUrl: `/books/${bookId}`,
       };
 
-      // Create Stripe checkout session
-      const session = await stripeService.createCheckoutSession(
-        userId || `guest_${Date.now()}`,
-        price,
+      // Use the new createDownloadCheckoutSession method with product IDs
+      const session = await stripeService.createDownloadCheckoutSession(
+        bookId,
+        book.page_count,
+        userId,
         userEmail,
-        "book-download",
-        {
-          bookId: bookId,
-          returnUrl: `/books/${bookId}`,
-          ...metadata,
-        }
+        metadata
       );
 
       logger.info(`Created download checkout session for book ${bookId}`);
@@ -146,7 +134,6 @@ class BookPurchaseService {
       user_id: userId,
       status: "completed",
       expires_at: { $gt: new Date() },
-      download_count: { $lt: this.max_downloads },
     });
 
     return !!purchase;
@@ -159,7 +146,10 @@ class BookPurchaseService {
     try {
       const { metadata } = stripeSession;
       
-      if (metadata.type !== "book_download" && metadata.type !== "pdf_download") {
+      // Handle different payment types
+      const paymentType = metadata.type;
+      if (paymentType !== "book_download" && paymentType !== "book_print" && paymentType !== "pdf_download") {
+        logger.info(`Ignoring payment type: ${paymentType}`);
         return;
       }
 
@@ -173,13 +163,23 @@ class BookPurchaseService {
         return existingPurchase;
       }
 
-      // Create purchase record
+      // Determine purchase type based on payment type and page count
+      let purchaseType;
+      const pageCount = parseInt(metadata.page_count || 12);
+      
+      if (paymentType === "book_print") {
+        purchaseType = `print-${pageCount}`;
+      } else {
+        purchaseType = `download-${pageCount}`;
+      }
+
+      // Create main purchase record
       const purchase = await BookPurchase.create({
         user_id: metadata.user_id && !metadata.user_id.startsWith("guest_") 
           ? metadata.user_id 
           : null,
         book_id: metadata.book_id || metadata.bookId,
-        purchase_type: "download",
+        purchase_type: purchaseType,
         amount_cents: stripeSession.amount_total,
         currency: stripeSession.currency,
         stripe_session_id: stripeSession.id,
@@ -187,19 +187,46 @@ class BookPurchaseService {
         status: "completed",
         guest_email: stripeSession.customer_details?.email || stripeSession.customer_email,
         metadata: {
-          page_count: parseInt(metadata.page_count || 12),
+          page_count: pageCount,
           is_owner: metadata.is_owner === "true",
         },
         max_downloads: parseInt(process.env.MAX_DOWNLOADS_PER_PURCHASE || 5),
         expires_at: new Date(Date.now() + parseInt(process.env.DOWNLOAD_LINK_EXPIRY_DAYS || 30) * 24 * 60 * 60 * 1000),
       });
 
+      // If this is a print purchase, also create a complementary download purchase
+      if (paymentType === "book_print") {
+        const downloadPurchase = await BookPurchase.create({
+          user_id: metadata.user_id && !metadata.user_id.startsWith("guest_") 
+            ? metadata.user_id 
+            : null,
+          book_id: metadata.book_id || metadata.bookId,
+          purchase_type: `download-${pageCount}`,
+          amount_cents: 0, // Complementary - no additional charge
+          currency: stripeSession.currency,
+          stripe_session_id: `${stripeSession.id}_download`, // Unique ID for the complementary download
+          stripe_payment_intent_id: stripeSession.payment_intent,
+          status: "completed",
+          guest_email: stripeSession.customer_details?.email || stripeSession.customer_email,
+          metadata: {
+            page_count: pageCount,
+            is_owner: metadata.is_owner === "true",
+            is_complementary_download: true,
+            parent_purchase_id: purchase._id,
+          },
+          max_downloads: parseInt(process.env.MAX_DOWNLOADS_PER_PURCHASE || 5),
+          expires_at: new Date(Date.now() + parseInt(process.env.DOWNLOAD_LINK_EXPIRY_DAYS || 30) * 24 * 60 * 60 * 1000),
+        });
+
+        logger.info(`Created complementary download for print purchase: ${downloadPurchase._id}`);
+      }
+
       // Update book download count
       await Book.findByIdAndUpdate(metadata.book_id || metadata.bookId, {
         $inc: { total_downloads: 1 },
       });
 
-      // Handle charity donation if present
+      // Handle charity donation if present (keeping existing logic)
       if (metadata.charity_id || metadata.charityId) {
         try {
           await CharityDonation.findOneAndUpdate(
@@ -242,6 +269,8 @@ class BookPurchaseService {
       const purchases = await BookPurchase.find({
         user_id: userId,
         status: "completed",
+        // Exclude complementary downloads from the list to avoid duplicates
+        "metadata.is_complementary_download": { $ne: true }
       })
         .populate("book_id", "title page_count front_cover_image_url")
         .sort({ created_at: -1 })
@@ -251,6 +280,7 @@ class BookPurchaseService {
       const total = await BookPurchase.countDocuments({
         user_id: userId,
         status: "completed",
+        "metadata.is_complementary_download": { $ne: true }
       });
 
       return {
@@ -266,6 +296,21 @@ class BookPurchaseService {
       logger.error(`Error getting user purchases: ${error.message}`);
       throw error;
     }
+  }
+
+  /**
+   * Check user's entitlements for a specific book
+   */
+  async getBookEntitlements(bookId, userId) {
+    if (!userId) {
+      return {
+        hasDownload: false,
+        hasPrint: false,
+        canDownload: false,
+      };
+    }
+
+    return await BookPurchase.getUserEntitlements(bookId, userId);
   }
 }
 
