@@ -71,11 +71,7 @@ const userSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
-    credits_balance: {
-      type: Number,
-      default: 0,
-      min: 0,
-    },
+    // REMOVED: credits_balance field
     preferred_language: {
       type: String,
       enum: ["en", "es"],
@@ -176,10 +172,7 @@ userSchema.set("toJSON", {
       delete ret.email_verified;
     }
 
-    if (ret.credits_balance !== undefined) {
-      ret.creditsBalance = ret.credits_balance;
-      delete ret.credits_balance;
-    }
+    // REMOVED: credits_balance transformation
 
     if (ret.new_email !== undefined) {
       ret.pendingEmailChange = ret.new_email;
