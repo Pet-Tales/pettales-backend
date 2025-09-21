@@ -1,10 +1,10 @@
 const mongoose = require("mongoose");
-const { PrintOrder, Book, User, CreditTransaction } = require("../models");
+const { PrintOrder, Book, User } = require("../models");
 const luluService = require("./luluService");
-const creditService = require("./creditService");
+const stripeService = require("./stripeService");
 const printReadyPDFService = require("./printReadyPDFService");
 const logger = require("../utils/logger");
-const { CREDIT_VALUE_USD } = require("../utils/constants");
+const { PRINT_MARKUP_PERCENTAGE, SHIPPING_MARKUP_PERCENTAGE } = require("../utils/constants");
 
 class PrintOrderService {
   /**
@@ -71,20 +71,32 @@ class PrintOrderService {
         shippingLevel
       );
 
-      const luluCostUSD = parseFloat(luluCostData.total_cost_incl_tax);
-      const markupPercentage = 50; // 50% markup
-      const totalCostUSD = luluCostUSD * (1 + markupPercentage / 100);
-      const totalCostCredits = Math.ceil(totalCostUSD / CREDIT_VALUE_USD);
+      // Calculate costs with markup
+      const luluPrintCost = parseFloat(luluCostData.line_item_costs?.[0]?.total_cost_incl_tax || 0);
+      const luluShippingCost = parseFloat(luluCostData.shipping_cost?.total_cost_incl_tax || 0);
+      const luluTotalCost = parseFloat(luluCostData.total_cost_incl_tax);
+
+      // Apply markups
+      const printMarkupPercentage = PRINT_MARKUP_PERCENTAGE || 30;
+      const shippingMarkupPercentage = SHIPPING_MARKUP_PERCENTAGE || 10;
+
+      const printCostWithMarkup = luluPrintCost * (1 + printMarkupPercentage / 100);
+      const shippingCostWithMarkup = luluShippingCost * (1 + shippingMarkupPercentage / 100);
+      const totalCostUSD = printCostWithMarkup + shippingCostWithMarkup;
+      const totalCostCents = Math.ceil(totalCostUSD * 100);
 
       const costBreakdown = {
         book_id: bookId,
         book_title: book.title,
         page_count: book.page_count,
         quantity: quantity,
-        lulu_cost_usd: luluCostUSD, // Keep for internal use (database storage)
-        markup_percentage: markupPercentage, // Keep for internal use (database storage)
+        lulu_cost_usd: luluTotalCost,
+        lulu_print_cost: luluPrintCost,
+        lulu_shipping_cost: luluShippingCost,
+        print_markup_percentage: printMarkupPercentage,
+        shipping_markup_percentage: shippingMarkupPercentage,
         total_cost_usd: totalCostUSD,
-        total_cost_credits: totalCostCredits,
+        total_cost_cents: totalCostCents,
         shipping_level: shippingLevel,
         currency: luluCostData.currency,
         cost_breakdown: {
@@ -97,33 +109,29 @@ class PrintOrderService {
 
       logger.info("Order cost calculated successfully", {
         bookId,
-        totalCostCredits,
+        totalCostCents,
         totalCostUSD,
-        luluCostUSD,
+        luluTotalCost,
       });
 
       return costBreakdown;
     } catch (error) {
       logger.error("Failed to calculate order cost:", error.message);
-      // throw new Error(`Failed to calculate order cost: ${error.message}`);
       throw new Error(`${error.message.replace("Error: ", "")}`);
     }
   }
 
   /**
-   * Create a new print order
+   * Create a Stripe checkout session for print order
    */
-  async createPrintOrder(userId, orderData) {
-    const session = await mongoose.startSession();
-    session.startTransaction();
-
+  async createPrintOrderCheckout(userId, orderData) {
     try {
-      logger.info(`Creating print order for user ${userId}`);
+      logger.info(`Creating print order checkout for user ${userId}`);
 
       const { bookId, quantity, shippingAddress, shippingLevel } = orderData;
 
       // Validate book exists and user has access
-      const book = await Book.findById(bookId).session(session);
+      const book = await Book.findById(bookId);
       if (!book) {
         throw new Error("Book not found");
       }
@@ -144,12 +152,70 @@ class PrintOrderService {
         shippingLevel
       );
 
-      // Check user has sufficient credits
-      const user = await User.findById(userId).session(session);
-      if (user.credits_balance < costData.total_cost_credits) {
-        throw new Error(
-          `Insufficient credits. Required: ${costData.total_cost_credits}, Available: ${user.credits_balance}`
-        );
+      // Get user email
+      const user = await User.findById(userId);
+      const userEmail = user?.email;
+
+      // Create Stripe checkout session with dynamic pricing
+      const metadata = {
+        order_type: "print",
+        book_id: bookId,
+        user_id: userId,
+        quantity: quantity.toString(),
+        page_count: book.page_count.toString(),
+        shipping_level: shippingLevel,
+        shipping_country: shippingAddress.country_code,
+        shipping_city: shippingAddress.city,
+        shipping_state: shippingAddress.state_code,
+        shipping_postal_code: shippingAddress.postal_code,
+        lulu_print_cost: costData.lulu_print_cost.toString(),
+        lulu_shipping_cost: costData.lulu_shipping_cost.toString(),
+        print_markup: costData.print_markup_percentage.toString(),
+        shipping_markup: costData.shipping_markup_percentage.toString(),
+      };
+
+      const session = await stripeService.createPrintCheckoutSession(
+        bookId,
+        costData.total_cost_cents,
+        userId,
+        userEmail,
+        metadata
+      );
+
+      logger.info("Print order checkout session created", {
+        sessionId: session.id,
+        bookId,
+        userId,
+        totalCostCents: costData.total_cost_cents,
+      });
+
+      return {
+        checkoutUrl: session.url,
+        sessionId: session.id,
+        costData,
+      };
+    } catch (error) {
+      logger.error("Failed to create print order checkout:", error.message);
+      throw new Error(`Failed to create print order checkout: ${error.message}`);
+    }
+  }
+
+  /**
+   * Create a new print order (called after successful payment)
+   */
+  async createPrintOrder(userId, orderData, stripeSessionId = null) {
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
+    try {
+      logger.info(`Creating print order for user ${userId}`);
+
+      const { bookId, quantity, shippingAddress, shippingLevel, costData } = orderData;
+
+      // Validate book exists
+      const book = await Book.findById(bookId).session(session);
+      if (!book) {
+        throw new Error("Book not found");
       }
 
       // Generate external ID for the print order
@@ -157,17 +223,18 @@ class PrintOrderService {
       const random = Math.random().toString(36).substring(2, 8).toUpperCase();
       const externalId = `PTO_${timestamp}_${random}`;
 
-      // Create print order first to get the order ID
+      // Create print order
       const printOrder = new PrintOrder({
         user_id: userId,
         book_id: bookId,
         external_id: externalId,
         quantity: quantity,
-        total_cost_credits: costData.total_cost_credits,
+        total_cost_cents: costData.total_cost_cents,
         lulu_cost_usd: costData.lulu_cost_usd,
-        markup_percentage: costData.markup_percentage,
+        markup_percentage: costData.print_markup_percentage,
         shipping_address: shippingAddress,
         shipping_level: shippingLevel,
+        stripe_session_id: stripeSessionId,
         status: "created",
       });
 
@@ -181,31 +248,6 @@ class PrintOrderService {
       printOrder.cover_pdf_url = pdfUrls.coverPdfUrl;
       printOrder.interior_pdf_url = pdfUrls.interiorPdfUrl;
 
-      await printOrder.save({ session });
-
-      // Deduct credits from user
-      const updatedUser = await User.findByIdAndUpdate(
-        userId,
-        { $inc: { credits_balance: -costData.total_cost_credits } },
-        { new: true, session }
-      );
-
-      // Create credit transaction record
-      const creditTransaction = await CreditTransaction.create(
-        [
-          {
-            user_id: userId,
-            type: "usage",
-            amount: -costData.total_cost_credits,
-            description: `Print order for "${book.title}" - ${quantity} copies`,
-            book_id: bookId,
-          },
-        ],
-        { session }
-      );
-
-      // Update print order with credit transaction reference
-      printOrder.credit_transaction_id = creditTransaction[0]._id;
       await printOrder.save({ session });
 
       // Submit to Lulu API
@@ -231,8 +273,6 @@ class PrintOrderService {
         printOrderId: printOrder._id,
         externalId: printOrder.external_id,
         luluPrintJobId: luluPrintJob.id,
-        creditsDeducted: costData.total_cost_credits,
-        newUserBalance: updatedUser.credits_balance,
       });
 
       return {
@@ -241,7 +281,6 @@ class PrintOrderService {
           "title"
         ),
         costData,
-        newCreditBalance: updatedUser.credits_balance,
       };
     } catch (error) {
       await session.abortTransaction();
@@ -249,6 +288,68 @@ class PrintOrderService {
       throw new Error(`Failed to create print order: ${error.message}`);
     } finally {
       session.endSession();
+    }
+  }
+
+  /**
+   * Process successful print payment from Stripe webhook
+   */
+  async processPrintPaymentSuccess(stripeSession) {
+    try {
+      const { metadata } = stripeSession;
+
+      if (metadata.order_type !== "print" && metadata.type !== "book_print") {
+        return;
+      }
+
+      // Check if print order already exists for this session
+      const existingOrder = await PrintOrder.findOne({
+        stripe_session_id: stripeSession.id,
+      });
+
+      if (existingOrder) {
+        logger.info(`Print order already exists for session ${stripeSession.id}`);
+        return existingOrder;
+      }
+
+      // Reconstruct order data from metadata
+      const orderData = {
+        bookId: metadata.book_id,
+        quantity: parseInt(metadata.quantity),
+        shippingAddress: {
+          country_code: metadata.shipping_country,
+          city: metadata.shipping_city,
+          state_code: metadata.shipping_state,
+          postal_code: metadata.shipping_postal_code,
+          // Note: Full address details should be collected from Stripe checkout
+          name: stripeSession.shipping_details?.name || stripeSession.customer_details?.name,
+          line1: stripeSession.shipping_details?.address?.line1,
+          line2: stripeSession.shipping_details?.address?.line2,
+        },
+        shippingLevel: metadata.shipping_level,
+        costData: {
+          total_cost_cents: stripeSession.amount_total,
+          lulu_cost_usd: parseFloat(metadata.lulu_print_cost) + parseFloat(metadata.lulu_shipping_cost),
+          print_markup_percentage: parseInt(metadata.print_markup),
+        },
+      };
+
+      // Create the print order
+      const result = await this.createPrintOrder(
+        metadata.user_id,
+        orderData,
+        stripeSession.id
+      );
+
+      logger.info("Print order created from Stripe webhook", {
+        printOrderId: result.printOrder._id,
+        stripeSessionId: stripeSession.id,
+      });
+
+      return result.printOrder;
+    } catch (error) {
+      logger.error("Failed to process print payment:", error.message);
+      throw error;
     }
   }
 
@@ -342,16 +443,13 @@ class PrintOrderService {
    * Cancel a print order
    */
   async cancelPrintOrder(orderId, userId) {
-    const session = await mongoose.startSession();
-    session.startTransaction();
-
     try {
       logger.info(`Canceling print order ${orderId} for user ${userId}`);
 
       const printOrder = await PrintOrder.findOne({
         _id: orderId,
         user_id: userId,
-      }).session(session);
+      });
 
       if (!printOrder) {
         throw new Error("Print order not found");
@@ -373,120 +471,26 @@ class PrintOrderService {
         }
       }
 
-      // Refund credits to user
-      await this.refundPrintOrder(printOrder._id, session);
-
       // Update order status
       printOrder.status = "canceled";
-      await printOrder.save({ session });
+      await printOrder.save();
 
-      await session.commitTransaction();
+      // TODO: Process Stripe refund if needed
+      if (printOrder.stripe_session_id) {
+        logger.info("Note: Stripe refund should be processed manually for now", {
+          orderId,
+          stripeSessionId: printOrder.stripe_session_id,
+        });
+      }
 
       logger.info("Print order canceled successfully", {
         orderId,
-        creditsRefunded: printOrder.total_cost_credits,
       });
 
       return printOrder;
     } catch (error) {
-      await session.abortTransaction();
       logger.error("Failed to cancel print order:", error.message);
       throw new Error(`Failed to cancel print order: ${error.message}`);
-    } finally {
-      session.endSession();
-    }
-  }
-
-  /**
-   * Refund credits for a failed or canceled print order
-   */
-  async refundPrintOrder(
-    printOrderId,
-    session = null,
-    reason = "Order failed"
-  ) {
-    const useSession = session || (await mongoose.startSession());
-    if (!session) useSession.startTransaction();
-
-    try {
-      const printOrder = await PrintOrder.findById(printOrderId).session(
-        useSession
-      );
-      if (!printOrder) {
-        throw new Error("Print order not found");
-      }
-
-      // Check if already refunded
-      const existingRefund = await CreditTransaction.findOne({
-        user_id: printOrder.user_id,
-        type: "refund",
-        description: {
-          $regex: `Refund for print order ${printOrder.external_id}`,
-        },
-      }).session(useSession);
-
-      if (existingRefund) {
-        logger.info("Print order already refunded", {
-          printOrderId,
-          existingRefundId: existingRefund._id,
-        });
-        return existingRefund;
-      }
-
-      // Get user current balance for logging
-      const user = await User.findById(printOrder.user_id).session(useSession);
-      const oldBalance = user.credits_balance;
-
-      // Refund credits to user
-      const updatedUser = await User.findByIdAndUpdate(
-        printOrder.user_id,
-        { $inc: { credits_balance: printOrder.total_cost_credits } },
-        { new: true, session: useSession }
-      );
-
-      // Create refund transaction record
-      const refundTransaction = await CreditTransaction.create(
-        [
-          {
-            user_id: printOrder.user_id,
-            type: "refund",
-            amount: printOrder.total_cost_credits,
-            description: `Refund for print order ${printOrder.external_id} - ${reason}`,
-            book_id: printOrder.book_id,
-          },
-        ],
-        { session: useSession }
-      );
-
-      if (!session) {
-        await useSession.commitTransaction();
-      }
-
-      logger.info("Print order refunded successfully", {
-        printOrderId,
-        userId: printOrder.user_id,
-        creditsRefunded: printOrder.total_cost_credits,
-        oldBalance,
-        newBalance: updatedUser.credits_balance,
-        reason,
-        refundTransactionId: refundTransaction[0]._id,
-      });
-
-      return refundTransaction[0];
-    } catch (error) {
-      if (!session) {
-        await useSession.abortTransaction();
-      }
-      logger.error("Failed to refund print order:", {
-        printOrderId,
-        error: error.message,
-        reason,
-      });
-      throw error;
-    } finally {
-      if (!session) {
-        useSession.endSession();
-      }
     }
   }
 
@@ -531,7 +535,6 @@ class PrintOrderService {
       if (newStatus === "rejected") {
         printOrder.error_message =
           status.message || "Order was rejected by Lulu";
-        // Refund will be handled separately
       }
 
       await printOrder.save();
