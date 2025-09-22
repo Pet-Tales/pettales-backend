@@ -23,8 +23,20 @@ router.post(
 );
 
 /**
+ * @route POST /api/print-orders/create-checkout
+ * @desc Create a Stripe checkout session for print order
+ * @access Private
+ */
+router.post(
+  "/create-checkout",
+  requireAuth,
+  createPrintOrderValidation,
+  printOrderController.createPrintOrderCheckout
+);
+
+/**
  * @route POST /api/print-orders/create
- * @desc Create a new print order
+ * @desc DEPRECATED - Create a new print order (now redirects to checkout)
  * @access Private
  */
 router.post(
