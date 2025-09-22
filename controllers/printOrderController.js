@@ -24,8 +24,15 @@ const calculateCost = async (req, res) => {
       shippingLevel
     );
 
-    // Filter out markup information for frontend response
-    const { lulu_cost_usd, markup_percentage, ...publicCostData } = costData;
+    // Filter out internal markup information for frontend response
+    const { 
+      lulu_cost_usd, 
+      lulu_print_cost,
+      lulu_shipping_cost,
+      print_markup_percentage, 
+      shipping_markup_percentage,
+      ...publicCostData 
+    } = costData;
 
     res.status(200).json({
       success: true,
@@ -43,44 +50,62 @@ const calculateCost = async (req, res) => {
 };
 
 /**
- * Create a new print order
- * POST /api/print-orders/create
+ * Create a print order checkout session
+ * POST /api/print-orders/create-checkout
+ * This replaces the old createPrintOrder that used credits
  */
-const createPrintOrder = async (req, res) => {
+const createPrintOrderCheckout = async (req, res) => {
   try {
     const { bookId, quantity, shippingAddress, shippingLevel } = req.body;
     const userId = req.user.id;
 
-    logger.info(`Creating print order`, {
+    logger.info(`Creating print order checkout session`, {
       userId,
       bookId,
       quantity,
       shippingLevel,
     });
 
-    const result = await printOrderService.createPrintOrder(userId, {
+    const result = await printOrderService.createPrintOrderCheckout(userId, {
       bookId,
       quantity,
       shippingAddress,
       shippingLevel,
     });
 
-    res.status(201).json({
+    res.status(200).json({
       success: true,
-      message: "Print order created successfully",
+      message: "Print order checkout session created successfully",
       data: {
-        printOrder: result.printOrder,
-        costData: result.costData,
+        checkoutUrl: result.checkoutUrl,
+        sessionId: result.sessionId,
+        costData: {
+          total_cost_usd: result.costData.total_cost_usd,
+          total_cost_cents: result.costData.total_cost_cents,
+          shipping_level: result.costData.shipping_level,
+          quantity: result.costData.quantity,
+          page_count: result.costData.page_count,
+        },
       },
     });
   } catch (error) {
-    logger.error("Failed to create print order:", error.message);
+    logger.error("Failed to create print order checkout:", error.message);
     res.status(400).json({
       success: false,
       message: error.message,
       error: error.message,
     });
   }
+};
+
+/**
+ * DEPRECATED: Old create print order endpoint
+ * Keeping for backwards compatibility but returns checkout session instead
+ * POST /api/print-orders/create
+ */
+const createPrintOrder = async (req, res) => {
+  logger.warn("Using deprecated createPrintOrder endpoint - redirecting to checkout");
+  return createPrintOrderCheckout(req, res);
 };
 
 /**
@@ -340,7 +365,8 @@ const getShippingOptions = async (req, res) => {
 
 module.exports = {
   calculateCost,
-  createPrintOrder,
+  createPrintOrderCheckout, // New method for Stripe checkout
+  createPrintOrder, // Deprecated but redirects to checkout
   getUserPrintOrders,
   getPrintOrder,
   cancelPrintOrder,
