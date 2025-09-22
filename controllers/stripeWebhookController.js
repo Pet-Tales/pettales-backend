@@ -1,5 +1,6 @@
 const stripeService = require("../services/stripeService");
 const bookPurchaseService = require("../services/bookPurchaseService");
+const printOrderService = require("../services/printOrderService");
 const logger = require("../utils/logger");
 
 /**
@@ -54,7 +55,25 @@ const handleCheckoutSessionCompleted = async (session) => {
   try {
     const sessionType = session.metadata?.type;
     
-    // Handle book downloads (new system)
+    // Handle print orders (new)
+    if (sessionType === "book_print") {
+      try {
+        // Process print order creation
+        await printOrderService.processPrintPaymentSuccess(session);
+        
+        // Also process as book purchase for the download entitlement
+        await bookPurchaseService.processPaymentSuccess(session);
+        
+        logger.info(
+          `Print order processed for session: ${session.id}`
+        );
+      } catch (e) {
+        logger.error(`Failed to process print order: ${e.message}`);
+      }
+      return;
+    }
+    
+    // Handle book downloads (existing system)
     if (sessionType === "book_download") {
       try {
         await bookPurchaseService.processPaymentSuccess(session);
@@ -125,11 +144,9 @@ const handleCheckoutSessionCompleted = async (session) => {
  */
 const handlePaymentIntentSucceeded = async (paymentIntent) => {
   try {
-    // Check if this is a book download or PDF download
-    if (
-      paymentIntent.metadata?.type !== "book_download" &&
-      paymentIntent.metadata?.type !== "pdf_download"
-    ) {
+    // Check if this is a book-related purchase
+    const validTypes = ["book_download", "book_print", "pdf_download"];
+    if (!validTypes.includes(paymentIntent.metadata?.type)) {
       logger.info(
         `Ignoring non-book purchase payment intent: ${paymentIntent.id}`
       );
@@ -152,8 +169,9 @@ const handlePaymentIntentSucceeded = async (paymentIntent) => {
  */
 const handlePaymentIntentFailed = async (paymentIntent) => {
   try {
-    // Check if this is a book download
-    if (paymentIntent.metadata?.type !== "book_download") {
+    // Check if this is a book-related purchase
+    const validTypes = ["book_download", "book_print"];
+    if (!validTypes.includes(paymentIntent.metadata?.type)) {
       logger.info(
         `Ignoring non-book purchase payment intent: ${paymentIntent.id}`
       );
