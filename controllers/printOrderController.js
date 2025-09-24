@@ -330,7 +330,7 @@ const getShippingOptions = async (req, res) => {
           `${luluOption.total_days_min || "Unknown"}-${
             luluOption.total_days_max || "Unknown"
           } business days`,
-        cost: ((parseFloat(luluOption.cost_incl_tax || 0) * (1 + (SHIPPING_MARKUP_PERCENTAGE || 5) / 100)) + printWithMarkup).toFixed(2),
+        cost: (parseFloat(luluOption.cost_incl_tax || 0) * (1 + (SHIPPING_MARKUP_PERCENTAGE || 5) / 100)).toFixed(2),
         traceable: luluOption.traceable || false,
         minDeliveryDate: luluOption.min_delivery_date,
         maxDeliveryDate: luluOption.max_delivery_date,
