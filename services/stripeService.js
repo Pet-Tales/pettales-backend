@@ -2,9 +2,9 @@ const stripe = require("stripe");
 const { 
   STRIPE_SECRET_KEY, 
   WEB_URL,
-  STRIPE_PRODUCT_DOWNLOAD_12,
-  STRIPE_PRODUCT_DOWNLOAD_16,
-  STRIPE_PRODUCT_DOWNLOAD_24,
+  STRIPE_PRICE_DOWNLOAD_12,
+  STRIPE_PRICE_DOWNLOAD_16,
+  STRIPE_PRICE_DOWNLOAD_24,
 } = require("../utils/constants");
 const logger = require("../utils/logger");
 
