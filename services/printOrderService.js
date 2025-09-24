@@ -105,6 +105,8 @@ class PrintOrderService {
           fulfillment: luluCostData.fulfillment_cost,
           fees: luluCostData.fees || [],
         },
+        display_print_cost_usd: printCostWithMarkup,
+        display_shipping_cost_usd: shippingCostWithMarkup,
       };
 
       logger.info("Order cost calculated successfully", {
