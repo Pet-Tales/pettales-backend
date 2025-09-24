@@ -7,7 +7,6 @@ const stripeService = require("../services/stripeService");
 const logger = require("../utils/logger");
 const https = require("https");
 const http = require("http");
-const { CREDIT_COSTS } = require("../utils/constants");
 // const { useErrorTranslation } = require("../utils/errorMapper");
 
 const bookService = new BookService();
@@ -551,7 +550,6 @@ const checkPDFStatus = async (req, res) => {
  */
 const downloadPDF = async (req, res) => {
   try {
-    // Check for validation errors
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       return res.status(400).json({
@@ -562,9 +560,9 @@ const downloadPDF = async (req, res) => {
     }
 
     const { id } = req.params;
+    const { session_id } = req.query;
     const userId = req.user ? req.user._id.toString() : null;
 
-    // Additional check for valid ObjectId format
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({
         success: false,
@@ -572,9 +570,43 @@ const downloadPDF = async (req, res) => {
       });
     }
 
-    // Get book and check access permissions
-    const book = await bookService.getBookById(id, userId);
+    // If session_id is present, verify payment and stream PDF
+    if (session_id) {
+      try {
+        const session = await stripeService.retrieveSession(session_id);
+        
+        if (session.payment_status === 'paid' && 
+            session.metadata?.book_id === id &&
+            (session.metadata?.type === 'book_download' || session.metadata?.type === 'pdf_download')) {
+          
+          const book = await bookService.getBookById(id, userId);
+          if (!book.pdfUrl) {
+            return res.status(404).json({
+              success: false,
+              message: "PDF not available for this book",
+            });
+          }
+          
+          logger.info(`Verified payment session ${session_id} for book ${id}, streaming PDF`);
+          return streamPDFToClient(book, id, res);
+        } else {
+          return res.status(400).json({
+            success: false,
+            message: "Invalid or unpaid session",
+          });
+        }
+      } catch (sessionError) {
+        logger.error(`Session verification error: ${sessionError.message}`);
+        return res.status(400).json({
+          success: false,
+          message: "Session verification failed",
+        });
+      }
+    }
 
+    // No session_id - create Stripe checkout session
+    const book = await bookService.getBookById(id, userId);
+    
     if (!book.pdfUrl) {
       return res.status(404).json({
         success: false,
@@ -582,126 +614,34 @@ const downloadPDF = async (req, res) => {
       });
     }
 
-    // Check if user is the book owner (free download)
+    // For non-public books, only owner can access (but still must pay)
     const isOwner = userId && book.isOwner;
-
-    if (isOwner) {
-      // Book owner gets free download
-      logger.info(`Book owner ${userId} downloading PDF for book ${id}`);
-      return streamPDFToClient(book, id, res);
-    }
-
-    // For non-owners downloading public books, payment is required
-    if (!book.isPublic) {
+    if (!book.isPublic && !isOwner) {
       return res.status(403).json({
         success: false,
         message: "Access denied",
       });
     }
 
-    // Check for valid session ID (from successful payment) - works for both guests and authenticated users
-    const sessionId = req.query.session_id;
-    if (sessionId) {
-      try {
-        const isValidSession = await stripeService.isSessionCompletedForBook(
-          sessionId,
-          id
-        );
-
-        if (isValidSession) {
-          const userType = userId ? "authenticated user" : "guest user";
-          logger.info(
-            `${userType} with valid session ${sessionId} downloading PDF for book ${id}`
-          );
-          return streamPDFToClient(book, id, res);
-        } else {
-          logger.warn(`Invalid session ${sessionId} provided for book ${id}`);
-        }
-      } catch (sessionError) {
-        logger.error(`Error verifying session: ${sessionError.message}`);
-      }
-    }
-
-    // No valid session - redirect to Stripe checkout (same flow for both guests and authenticated users)
-    // Charity selection logic: if any enabled charities exist, require charity_id before creating checkout
-    const { Charity } = require("../models");
-    const enabledCount = await Charity.countDocuments({ is_enabled: true });
-    const charityId = req.query.charity_id;
-
-    if (enabledCount > 0 && !charityId) {
-      return res.json({
-        success: true,
-        requiresPayment: true,
-        charityRequired: true,
-        message: "Charity selection required before payment",
-      });
-    }
-
-    // Build user and stripe checkout
-    let checkoutUserId, userEmail;
-
-    if (userId) {
-      // Authenticated user
-      checkoutUserId = userId;
-      userEmail = req.user.email;
-      logger.info(
-        `Authenticated user ${userId} requesting PDF download for book ${id}, redirecting to payment`
-      );
-    } else {
-      // Guest user - create a temporary user identifier for the session
-      checkoutUserId = `guest_${Date.now()}_${Math.random()
-        .toString(36)
-        .substr(2, 9)}`;
-      userEmail = null;
-      logger.info(
-        `Guest user requesting PDF download for book ${id}, redirecting to payment`
-      );
-    }
-
     try {
-      // If charityId is present, validate it and include metadata
-      let charityMeta = {};
-      if (charityId) {
-        const charity = await Charity.findOne({
-          _id: charityId,
-          is_enabled: true,
-        });
-        if (!charity) {
-          return res
-            .status(400)
-            .json({ success: false, message: "Invalid charity selection" });
-        }
-        charityMeta = {
-          charityId: charity._id.toString(),
-          charityName: charity.name,
-        };
-      }
-
-      const session = await stripeService.createCreditPurchaseSession(
-        checkoutUserId,
-        CREDIT_COSTS.PDF_DOWNLOAD,
-        userEmail,
-        "pdf-download",
+      const session = await stripeService.createDownloadCheckoutSession(
+        id,
+        book.pageCount,
+        userId,
+        req.user?.email,
         {
-          bookId: id,
           returnUrl: `/books/${id}`,
-          ...charityMeta,
+          is_owner: isOwner.toString(),
         }
       );
 
       return res.json({
         success: true,
-        requiresPayment: true,
-        isGuest: !userId,
         checkoutUrl: session.url,
-        message: "Payment required for PDF download",
+        message: "Redirecting to payment",
       });
     } catch (stripeError) {
-      logger.error(
-        `Failed to create checkout session for ${
-          userId ? "user" : "guest"
-        } ${checkoutUserId}: ${stripeError.message}`
-      );
+      logger.error(`Failed to create checkout session: ${stripeError.message}`);
       return res.status(500).json({
         success: false,
         message: "Failed to create payment session",
@@ -710,7 +650,6 @@ const downloadPDF = async (req, res) => {
   } catch (error) {
     logger.error(`Download PDF error: ${error.message}`);
 
-    // Handle specific errors
     if (error.message === "Book not found") {
       return res.status(404).json({
         success: false,
@@ -733,7 +672,6 @@ const downloadPDF = async (req, res) => {
     }
   }
 };
-
 /**
  * Helper function to stream PDF to client
  */
