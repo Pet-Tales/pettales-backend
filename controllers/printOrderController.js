@@ -333,7 +333,7 @@ const printWithMarkup = basePrintIncl * (1 + (PRINT_MARKUP_PERCENTAGE || 100) / 
           `${luluOption.total_days_min || "Unknown"}-${
             luluOption.total_days_max || "Unknown"
           } business days`,
-        cost: luluOption.cost_excl_tax || null,
+        cost: ((parseFloat(luluOption.cost_incl_tax || 0) * (1 + (SHIPPING_MARKUP_PERCENTAGE || 5) / 100)) + printWithMarkup).toFixed(2),
         traceable: luluOption.traceable || false,
         minDeliveryDate: luluOption.min_delivery_date,
         maxDeliveryDate: luluOption.max_delivery_date,
