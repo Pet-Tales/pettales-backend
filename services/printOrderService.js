@@ -77,8 +77,8 @@ class PrintOrderService {
       const luluTotalCost = parseFloat(luluCostData.total_cost_incl_tax);
 
       // Apply markups
-      const printMarkupPercentage = PRINT_MARKUP_PERCENTAGE || 2000;
-      const shippingMarkupPercentage = SHIPPING_MARKUP_PERCENTAGE || 100;
+      const printMarkupPercentage = PRINT_MARKUP_PERCENTAGE || 100;
+      const shippingMarkupPercentage = SHIPPING_MARKUP_PERCENTAGE || 5;
 
       const printCostWithMarkup = luluPrintCost * (1 + printMarkupPercentage / 100);
       const shippingCostWithMarkup = luluShippingCost * (1 + shippingMarkupPercentage / 100);
