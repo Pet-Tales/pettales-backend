@@ -1,6 +1,7 @@
 const printOrderService = require("../services/printOrderService");
 const { Book } = require("../models");
 const logger = require("../utils/logger");
+const { PRINT_MARKUP_PERCENTAGE, SHIPPING_MARKUP_PERCENTAGE } = require("../utils/constants");
 
 /**
  * Calculate print order cost
