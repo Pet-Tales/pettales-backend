@@ -12,16 +12,16 @@ const logger = require("../utils/logger");
 const stripeClient = stripe(STRIPE_SECRET_KEY);
 
 class StripeService {
-  /**
-   * Get the product ID for a download based on page count
+ /**
+   * Get the price ID for a download based on page count
    */
-  getDownloadProductId(pageCount) {
-    const productMap = {
-      12: STRIPE_PRODUCT_DOWNLOAD_12,
-      16: STRIPE_PRODUCT_DOWNLOAD_16,
-      24: STRIPE_PRODUCT_DOWNLOAD_24,
+  getDownloadPriceId(pageCount) {
+    const priceMap = {
+      12: STRIPE_PRICE_DOWNLOAD_12,
+      16: STRIPE_PRICE_DOWNLOAD_16,
+      24: STRIPE_PRICE_DOWNLOAD_24,
     };
-    return productMap[pageCount] || STRIPE_PRODUCT_DOWNLOAD_12;
+    return priceMap[pageCount] || STRIPE_PRICE_DOWNLOAD_12;
   }
 
   /**
