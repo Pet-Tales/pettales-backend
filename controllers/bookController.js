@@ -7,6 +7,7 @@ const stripeService = require("../services/stripeService");
 const logger = require("../utils/logger");
 const https = require("https");
 const http = require("http");
+const Book = require("../models/Book");
 // const { useErrorTranslation } = require("../utils/errorMapper");
 
 const bookService = new BookService();
