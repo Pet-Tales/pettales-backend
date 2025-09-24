@@ -288,6 +288,9 @@ const getShippingOptions = async (req, res) => {
       book.page_count,
       1 // Default quantity for options lookup
     );
+const probe = await luluService.calculatePrintCost(book.page_count, 1, shippingAddress, luluShippingOptions[0].level);
+const basePrintIncl = parseFloat(probe.line_item_costs?.[0]?.total_cost_incl_tax || 0);
+const printWithMarkup = basePrintIncl * (1 + (PRINT_MARKUP_PERCENTAGE || 100) / 100);
 
     // Map Lulu shipping options to our format with user-friendly names
     const shippingOptionsMap = {
