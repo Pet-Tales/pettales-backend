@@ -120,7 +120,7 @@ class StripeService {
           },
         ],
         mode: "payment",
-        success_url: `${WEB_URL}${returnUrl}?payment=success&print=true&session_id={CHECKOUT_SESSION_ID}`,
+        success_url: `${WEB_URL}${returnUrl}?session_id={CHECKOUT_SESSION_ID}`,
         cancel_url: `${WEB_URL}${returnUrl}?payment=cancelled`,
         ...(userEmail && { customer_email: userEmail }),
         metadata: {
