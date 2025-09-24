@@ -79,13 +79,6 @@ const createPrintOrderCheckout = async (req, res) => {
       data: {
         checkoutUrl: result.checkoutUrl,
         sessionId: result.sessionId,
-        costData: {
-          total_cost_usd: result.costData.total_cost_usd,
-          total_cost_cents: result.costData.total_cost_cents,
-          shipping_level: result.costData.shipping_level,
-          quantity: result.costData.quantity,
-          page_count: result.costData.page_count,
-        },
       },
     });
   } catch (error) {
