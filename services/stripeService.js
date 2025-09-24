@@ -35,7 +35,7 @@ class StripeService {
    */
   async createDownloadCheckoutSession(bookId, pageCount, userId, userEmail, metadata = {}) {
     try {
-      const productId = this.getDownloadProductId(pageCount);
+      const priceId = this.getDownloadPriceId(pageCount);
       
       logger.info(
         `Creating download checkout session for book ${bookId}, ${pageCount} pages`
