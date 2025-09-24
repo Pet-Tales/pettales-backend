@@ -111,8 +111,12 @@ class PrintOrderService {
 
       logger.info("Order cost calculated successfully", {
         bookId,
+        lulu_print_cost: luluPrintCost,
+        lulu_shipping_cost: luluShippingCost,
+        display_print_cost_usd: printCostWithMarkup,
+        display_shipping_cost_usd: shippingCostWithMarkup,
+        total_cost_usd: totalCostUSD,
         totalCostCents,
-        totalCostUSD,
         luluTotalCost,
       });
 
