@@ -43,9 +43,9 @@ const STRIPE_PUBLIC_KEY = process.env.STRIPE_PUBLIC_KEY;
 const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET;
 
 // Stripe Product IDs for downloads
-const STRIPE_PRODUCT_DOWNLOAD_12 = process.env.STRIPE_PRODUCT_DOWNLOAD_12 || "prod_T61vvxbhYQfK2T";
-const STRIPE_PRODUCT_DOWNLOAD_16 = process.env.STRIPE_PRODUCT_DOWNLOAD_16 || "prod_T61veXbua1EvzB";
-const STRIPE_PRODUCT_DOWNLOAD_24 = process.env.STRIPE_PRODUCT_DOWNLOAD_24 || "prod_T61vZIRlug7MgB";
+const STRIPE_PRICE_DOWNLOAD_12 = process.env.STRIPE_PRICE_DOWNLOAD_12;
+const STRIPE_PRICE_DOWNLOAD_16 = process.env.STRIPE_PRICE_DOWNLOAD_16;
+const STRIPE_PRICE_DOWNLOAD_24 = process.env.STRIPE_PRICE_DOWNLOAD_24;
 
 // Download Pricing (in cents - for display/reference only, actual prices are in Stripe)
 const DOWNLOAD_PRICES = {
