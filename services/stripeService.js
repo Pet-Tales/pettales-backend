@@ -48,7 +48,7 @@ class StripeService {
         payment_method_types: ["card"],
         line_items: [
           {
-            price: productId, // Using product ID directly - Stripe will use its default price
+            price: priceId,
             quantity: 1,
           },
         ],
