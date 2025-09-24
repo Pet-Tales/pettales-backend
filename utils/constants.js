@@ -114,8 +114,8 @@ const PASSWORD_RESET_EXPIRY_HOURS = 1;
 // const LOW_CREDIT_THRESHOLD = 100;
 
 // Print Markup Configuration (for Lulu print orders)
-const PRINT_MARKUP_PERCENTAGE = parseFloat(process.env.PRINT_MARKUP_PERCENTAGE || "30"); // 30% default markup
-const SHIPPING_MARKUP_PERCENTAGE = parseFloat(process.env.SHIPPING_MARKUP_PERCENTAGE || "10"); // 10% shipping markup
+const PRINT_MARKUP_PERCENTAGE = parseFloat(process.env.PRINT_MARKUP_PERCENTAGE || "100"); // 100% default markup
+const SHIPPING_MARKUP_PERCENTAGE = parseFloat(process.env.SHIPPING_MARKUP_PERCENTAGE || "5"); // 5% shipping markup
 
 // Determine if we're in local development (not staging or production)
 const IS_LOCAL_DEV =
