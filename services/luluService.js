@@ -209,7 +209,7 @@ class LuluService {
 
       // Prepare request data according to Lulu API specification
       const requestData = {
-        currency: "USD", // Required field
+        currency: "GBP", // Required field
         line_items: [
           {
             page_count: pageCount,
@@ -320,7 +320,7 @@ class LuluService {
       );
 
       logger.info("Print cost calculation successful", {
-        totalCostUSD: result.total_cost_incl_tax,
+        totalCostGBP: result.total_cost_incl_tax,
         currency: result.currency,
       });
 
