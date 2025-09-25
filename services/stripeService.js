@@ -109,7 +109,7 @@ class StripeService {
         line_items: [
           {
             price_data: {
-              currency: "usd",
+              currency: "gbp",
               product_data: {
                 name: `Print & Ship - ${pageCount} Page Book`,
                 description: `Professional printed book shipped to ${metadata.shipping_country || 'your address'}. Includes digital download.`,
@@ -189,7 +189,7 @@ class StripeService {
         line_items: [
           {
             price_data: {
-              currency: "usd",
+              currency: "gbp",
               product_data: {
                 name: metadata.productName || "PetTalesAI Purchase",
                 description: metadata.productDescription || "Purchase from PetTalesAI",
