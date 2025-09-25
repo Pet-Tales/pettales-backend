@@ -82,20 +82,20 @@ class PrintOrderService {
 
       const printCostWithMarkup = luluPrintCost * (1 + printMarkupPercentage / 100);
       const shippingCostWithMarkup = luluShippingCost * (1 + shippingMarkupPercentage / 100);
-      const totalCostUSD = printCostWithMarkup + shippingCostWithMarkup;
-      const totalCostCents = Math.ceil(totalCostUSD * 100);
+      const totalCostGBP = printCostWithMarkup + shippingCostWithMarkup;
+      const totalCostCents = Math.ceil(totalCostGBP * 100);
 
       const costBreakdown = {
         book_id: bookId,
         book_title: book.title,
         page_count: book.page_count,
         quantity: quantity,
-        lulu_cost_usd: luluTotalCost,
+        lulu_cost_gbp: luluTotalCost,
         lulu_print_cost: luluPrintCost,
         lulu_shipping_cost: luluShippingCost,
         print_markup_percentage: printMarkupPercentage,
         shipping_markup_percentage: shippingMarkupPercentage,
-        total_cost_usd: totalCostUSD,
+        total_cost_gbp: totalCostGBP,
         total_cost_cents: totalCostCents,
         shipping_level: shippingLevel,
         currency: luluCostData.currency,
@@ -105,17 +105,17 @@ class PrintOrderService {
           fulfillment: luluCostData.fulfillment_cost,
           fees: luluCostData.fees || [],
         },
-        display_print_cost_usd: printCostWithMarkup,
-        display_shipping_cost_usd: shippingCostWithMarkup,
+        display_print_cost_gbp: printCostWithMarkup,
+        display_shipping_cost_gbp: shippingCostWithMarkup,
       };
 
       logger.info("Order cost calculated successfully", {
         bookId,
         lulu_print_cost: luluPrintCost,
         lulu_shipping_cost: luluShippingCost,
-        display_print_cost_usd: printCostWithMarkup,
-        display_shipping_cost_usd: shippingCostWithMarkup,
-        total_cost_usd: totalCostUSD,
+        display_print_cost_gbp: printCostWithMarkup,
+        display_shipping_cost_gbp: shippingCostWithMarkup,
+        total_cost_gbp: totalCostGBP,
         totalCostCents,
         luluTotalCost,
       });
@@ -236,7 +236,7 @@ class PrintOrderService {
         external_id: externalId,
         quantity: quantity,
         total_cost_cents: costData.total_cost_cents,
-        lulu_cost_usd: costData.lulu_cost_usd,
+        lulu_cost_gbp: costData.lulu_cost_gbp,
         markup_percentage: costData.print_markup_percentage,
         shipping_address: shippingAddress,
         shipping_level: shippingLevel,
@@ -335,7 +335,7 @@ class PrintOrderService {
         shippingLevel: metadata.shipping_level,
         costData: {
           total_cost_cents: stripeSession.amount_total,
-          lulu_cost_usd: parseFloat(metadata.lulu_print_cost) + parseFloat(metadata.lulu_shipping_cost),
+          lulu_cost_gbp: parseFloat(metadata.lulu_print_cost) + parseFloat(metadata.lulu_shipping_cost),
           print_markup_percentage: parseInt(metadata.print_markup),
         },
       };
