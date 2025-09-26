@@ -141,7 +141,12 @@ class PrintOrderService {
       if (!book) {
         throw new Error("Book not found");
       }
+const isPublic = Boolean(book.is_public ?? book.isPublic);
+const isOwner  = book.user_id?.toString() === userId?.toString();
 
+if (!isOwner && !isPublic) {
+  throw new Error("You can only print your own books");
+}
 
       if (book.generation_status !== "completed") {
         throw new Error("Book must be completed before printing");
