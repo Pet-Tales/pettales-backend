@@ -464,17 +464,35 @@ class PrintReadyPDFService {
   }
 
   /**
-   * Process image for print (convert to CMYK, 300 DPI, proper size)
+   * Process image for print with robust fetching:
+   * - Try HTTP(S) fetch first
+   * - If it fails, derive S3 key from CloudFront URL and fetch via SDK
+   * - Also supports being passed a raw S3 key directly
    */
-  async processImageForPrint(imageUrl, targetWidth, targetHeight) {
+  async processImageForPrint(imageUrlOrKey, targetWidth, targetHeight) {
     try {
-      // Download image
-      const response = await fetch(imageUrl);
-      if (!response.ok) {
-        throw new Error(`Failed to fetch image: ${response.statusText}`);
-      }
+      let imageBuffer = null;
 
-      const imageBuffer = Buffer.from(await response.arrayBuffer());
+      const isHttp = typeof imageUrlOrKey === "string" && /^https?:\/\//i.test(imageUrlOrKey);
+
+      if (isHttp) {
+        // 1) Try direct HTTP(S) fetch first
+        try {
+          const res = await fetch(imageUrlOrKey);
+          if (!res.ok) {
+            throw new Error(`${res.status} ${res.statusText}`);
+          }
+          imageBuffer = Buffer.from(await res.arrayBuffer());
+        } catch (httpErr) {
+          // 2) Fallback: attempt to extract S3 key from CloudFront URL
+          const key = s3Service.extractS3KeyFromCloudFrontUrl(imageUrlOrKey);
+          if (!key) throw httpErr;
+          imageBuffer = await s3Service.getObjectBuffer(key);
+        }
+      } else {
+        // 3) Not a URL => treat as S3 key directly
+        imageBuffer = await s3Service.getObjectBuffer(imageUrlOrKey);
+      }
 
       // Process with Sharp
       const processedBuffer = await sharp(imageBuffer)
@@ -491,7 +509,7 @@ class PrintReadyPDFService {
 
       return processedBuffer;
     } catch (error) {
-      logger.error("Failed to process image for print:", error);
+      logger.error(`Failed to process image for print: ${error.message}`);
       throw error;
     }
   }
