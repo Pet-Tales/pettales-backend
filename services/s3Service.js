@@ -1,8 +1,9 @@
-const {
-  S3Client,
-  PutObjectCommand,
-  DeleteObjectCommand,
-} = require("@aws-sdk/client-s3");
++ const {
++   S3Client,
++   PutObjectCommand,
++   DeleteObjectCommand,
++   GetObjectCommand,
++ } = require("@aws-sdk/client-s3");
 const fs = require("fs");
 const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 const logger = require("../utils/logger");
