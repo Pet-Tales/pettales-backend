@@ -144,7 +144,7 @@ class PrintOrderService {
 
       if (
   book.user_id.toString() !== userId.toString() &&
-  !book.isPublic
+  !book.is_Public
 ) {
   throw new Error("Unauthorized: You can only print your own books");
 }
