@@ -21,20 +21,7 @@ class PrintOrderService {
       if (!book) {
         throw new Error("Book not found");
       }
-// DEBUG: confirm ownership & public flag
-logger.info("PRINT ACCESS", {
-  owner: book.user_id?.toString(),
-  requester: userId?.toString(),
-  is_public: book.is_public
-});
 
-// Allow if owner OR public; block if private and not owner
-if (
-  book.user_id.toString() !== userId.toString() &&
-  !book.is_public
-) {
-  throw new Error("You can only print your own books");
-}
       // First, get available shipping options for the destination
       logger.info("Getting available shipping options for destination", {
         country: shippingAddress.country_code,
