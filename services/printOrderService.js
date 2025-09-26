@@ -142,12 +142,6 @@ class PrintOrderService {
         throw new Error("Book not found");
       }
 
-      if (
-  book.user_id.toString() !== userId.toString() &&
-  !book.is_public
-) {
-  throw new Error("Unauthorized: You can only print your own books");
-}
 
       if (book.generation_status !== "completed") {
         throw new Error("Book must be completed before printing");
