@@ -317,6 +317,25 @@ const generateBookPdfS3Key = (userId, bookId) => {
   const timestamp = Date.now();
   return `${userId}/books/${bookId}/book_${bookId}_${timestamp}.pdf`;
 };
+/**
+ * Download an S3 object as a Buffer
+ * @param {string} key - S3 key (path in bucket)
+ * @returns {Promise<Buffer>}
+ */
+const getObjectBuffer = async (key) => {
+  try {
+    if (!S3_BUCKET_NAME) throw new Error("S3 bucket name not configured");
+    const client = getS3Client();
+    const command = new GetObjectCommand({ Bucket: S3_BUCKET_NAME, Key: key });
+    const res = await client.send(command);
+    const chunks = [];
+    for await (const chunk of res.Body) chunks.push(chunk);
+    return Buffer.concat(chunks);
+  } catch (error) {
+    logger.error(`Failed to GET s3://${S3_BUCKET_NAME}/${key}: ${error.message}`);
+    throw error;
+  }
+};
 
 module.exports = {
   generatePresignedUploadUrl,
@@ -334,4 +353,5 @@ module.exports = {
   generateBookPdfS3Key,
   isValidAvatarFileType,
   getFileExtensionFromContentType,
+  getObjectBuffer,
 };
