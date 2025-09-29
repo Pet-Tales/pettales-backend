@@ -141,8 +141,22 @@ class PrintOrderService {
       if (!book) {
         throw new Error("Book not found");
       }
-const isPublic = Boolean(book.is_public ?? book.isPublic);
-const isOwner  = book.user_id?.toString() === userId?.toString();
+// Treat several possible flags as "public"
+const isPublic =
+  !!(
+    book?.is_public === true ||
+    book?.isPublic === true ||
+    book?.visibility === "public" ||
+    book?.public === true ||
+    book?.is_template_public === true
+  );
+
+// Normalise owner id field (user_id vs user vs owner/created_by)
+const ownerId =
+  (book?.user_id || book?.user || book?.owner || book?.created_by);
+
+const isOwner =
+  !!(ownerId && userId && ownerId.toString() === userId.toString());
 
 if (!isOwner && !isPublic) {
   throw new Error("You can only print your own books");
