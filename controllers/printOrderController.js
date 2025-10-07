@@ -10,9 +10,10 @@ const { PRINT_MARKUP_PERCENTAGE, SHIPPING_MARKUP_PERCENTAGE } = require("../util
 const calculateCost = async (req, res) => {
   try {
     const { bookId, quantity, shippingAddress, shippingLevel } = req.body;
+    const userId = req.user?.id || null; // ✅ move this outside logger.info
 
     logger.info(`Calculating cost for print order`, {
-      const userId = req.user?.id || null;
+      userId,
       bookId,
       quantity,
       shippingLevel,
