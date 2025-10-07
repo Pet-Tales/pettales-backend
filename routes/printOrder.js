@@ -17,7 +17,6 @@ const {
  */
 router.post(
   "/calculate-cost",
-  requireAuth,
   calculateCostValidation,
   printOrderController.calculateCost
 );
@@ -29,7 +28,6 @@ router.post(
  */
 router.post(
   "/create-checkout",
-  requireAuth,
   createPrintOrderValidation,
   printOrderController.createPrintOrderCheckout
 );
@@ -41,7 +39,6 @@ router.post(
  */
 router.post(
   "/create",
-  requireAuth,
   createPrintOrderValidation,
   printOrderController.createPrintOrder
 );
