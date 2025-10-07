@@ -616,7 +616,7 @@ const downloadPDF = async (req, res) => {
     }
 
     // For non-public books, only owner can access (but still must pay)
-    const isOwner = userId && book.isOwner;
+    const isOwner = !!(userId && book.isOwner);
     if (!book.isPublic && !isOwner) {
       return res.status(403).json({
         success: false,
@@ -632,7 +632,7 @@ const downloadPDF = async (req, res) => {
         req.user?.email,
         {
           returnUrl: `/books/${id}`,
-          is_owner: isOwner.toString(),
+          is_owner: String(isOwner),
         }
       );
 
