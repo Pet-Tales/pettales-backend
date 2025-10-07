@@ -131,8 +131,11 @@ class PrintOrderService {
    * Create a Stripe checkout session for print order
    */
   async createPrintOrderCheckout(userId, orderData) {
-    try {
-      logger.info(`Creating print order checkout for user ${userId}`);
+  try {
+    // ✅ Prevent crash when guests don't have userId
+    userId = userId ? userId.toString() : null;
+
+    logger.info(`Creating print order checkout for user ${userId}`);
 
       const { bookId, quantity, shippingAddress, shippingLevel } = orderData;
 
