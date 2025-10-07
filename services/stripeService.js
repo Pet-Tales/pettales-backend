@@ -34,56 +34,47 @@ class StripeService {
    * @returns {Promise<Object>} - Stripe checkout session
    */
   async createDownloadCheckoutSession(bookId, pageCount, userId, userEmail, metadata = {}) {
-    try {
-      const priceId = this.getDownloadPriceId(pageCount);
-      
-      logger.info(
-        `Creating download checkout session for book ${bookId}, ${pageCount} pages`
-      );
+  try {
+    // --- SAFETY COERCIONS ---
+    const safeBookId    = bookId != null ? String(bookId) : "";
+    const safePageCount = Number.isFinite(Number(pageCount)) ? Number(pageCount) : 12;
+    const safeUserId    = userId != null ? String(userId) : `guest_${Date.now()}`;
+    const safeEmail     = (userEmail && String(userEmail).trim()) || undefined;
 
-      const returnUrl = metadata.returnUrl || `/books/${bookId}`;
-      
-      // Create checkout session with product ID
-      const session = await stripeClient.checkout.sessions.create({
-        payment_method_types: ["card"],
-        line_items: [
-          {
-            price: priceId,
-            quantity: 1,
-          },
-        ],
-        mode: "payment",
-        success_url: `${WEB_URL}${returnUrl}?payment=success&download=pdf&session_id={CHECKOUT_SESSION_ID}`,
-        cancel_url: `${WEB_URL}${returnUrl}?payment=cancelled`,
-        ...(userEmail && { customer_email: userEmail }),
-        metadata: {
-          type: "book_download",
-          book_id: bookId,
-          user_id: userId || `guest_${Date.now()}`,
-          page_count: pageCount.toString(),
-          ...metadata,
-        },
-        payment_intent_data: {
-          metadata: {
-            type: "book_download",
-            book_id: bookId,
-            user_id: userId || `guest_${Date.now()}`,
-            page_count: pageCount.toString(),
-          },
-        },
-      });
+    // Stripe metadata MUST be strings
+    const baseMeta = {
+      type: "book_download",
+      book_id: safeBookId,
+      user_id: safeUserId,
+      page_count: String(safePageCount),
+    };
+    const extraMeta = Object.fromEntries(
+      Object.entries(metadata || {}).map(([k, v]) => [k, String(v ?? "")])
+    );
 
-      logger.info(
-        `Created download checkout session for user ${userId}: ${session.id}`
-      );
-      return session;
-    } catch (error) {
-      logger.error(
-        `Failed to create download checkout session: ${error.message}`
-      );
-      throw new Error(`Download checkout session creation failed: ${error.message}`);
-    }
+    const priceId = this.getDownloadPriceId(safePageCount);
+    const returnUrl = metadata.returnUrl || `/books/${safeBookId}`;
+
+    logger.info(`Creating download checkout session for book ${safeBookId}, ${safePageCount} pages`);
+
+    const session = await stripeClient.checkout.sessions.create({
+      mode: "payment",
+      payment_method_types: ["card"],
+      line_items: [{ price: priceId, quantity: 1 }],
+      success_url: `${WEB_URL}${returnUrl}?payment=success&download=pdf&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${WEB_URL}${returnUrl}?payment=cancelled`,
+      ...(safeEmail && { customer_email: safeEmail }),
+      metadata: { ...baseMeta, ...extraMeta },
+      payment_intent_data: { metadata: { ...baseMeta } },
+    });
+
+    logger.info(`Created download checkout session for user ${safeUserId}: ${session.id}`);
+    return session;
+  } catch (error) {
+    logger.error(`Failed to create download checkout session: ${error.message}`);
+    throw new Error(`Download checkout session creation failed: ${error.message}`);
   }
+}
 
   /**
    * Create a Stripe checkout session for print orders (dynamic pricing)
