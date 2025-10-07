@@ -98,7 +98,6 @@ router.get(
  */
 router.post(
   "/shipping-options",
-  requireAuth,
   shippingOptionsValidation,
   printOrderController.getShippingOptions
 );
