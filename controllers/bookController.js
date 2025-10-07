@@ -697,6 +697,7 @@ const streamPDFToClient = (book, bookId, res) => {
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
     res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Access-Control-Expose-Headers", "Content-Disposition");
 
     // Pipe the PDF response to the client
     response.pipe(res);
