@@ -139,11 +139,24 @@ class PrintOrderService {
 
       const { bookId, quantity, shippingAddress, shippingLevel } = orderData;
 
-      // Validate book exists and user has access
-      const book = await Book.findById(bookId);
-      if (!book) {
-        throw new Error("Book not found");
-      }
+      // Validate book exists and ensure bookId was passed correctly
+if (!bookId) {
+  throw new Error("Missing bookId in checkout request");
+}
+
+const book = await Book.findById(bookId);
+if (!book) {
+  logger.error(`Book not found in createPrintOrderCheckout`, { bookId, userId });
+  throw new Error(`Book not found for ID: ${bookId}`);
+}
+
+// Log book for debugging
+logger.info(`Book found for checkout`, {
+  bookId: book._id.toString(),
+  title: book.title,
+  is_public: book.is_public,
+  user_id: book.user_id,
+});
 // Treat several possible flags as "public"
 const isPublic =
   !!(
