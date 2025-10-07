@@ -12,7 +12,7 @@ const calculateCost = async (req, res) => {
     const { bookId, quantity, shippingAddress, shippingLevel } = req.body;
 
     logger.info(`Calculating cost for print order`, {
-      userId: req.user.id,
+      const userId = req.user?.id || null;
       bookId,
       quantity,
       shippingLevel,
@@ -58,7 +58,7 @@ const calculateCost = async (req, res) => {
 const createPrintOrderCheckout = async (req, res) => {
   try {
     const { bookId, quantity, shippingAddress, shippingLevel } = req.body;
-    const userId = req.user.id;
+    const userId = req.user?.id || null;
 
     logger.info(`Creating print order checkout session`, {
       userId,
