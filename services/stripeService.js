@@ -86,65 +86,61 @@ class StripeService {
    * @returns {Promise<Object>} - Stripe checkout session
    */
   async createPrintCheckoutSession(bookId, totalCents, userId, userEmail, metadata = {}) {
-    try {
-      logger.info(
-        `Creating print checkout session: $${(totalCents / 100).toFixed(2)} for book ${bookId}`
-      );
+  try {
+    const safeBookId    = bookId != null ? String(bookId) : "";
+    const safeUserId    = userId != null ? String(userId) : `guest_${Date.now()}`;
+    const safeEmail     = (userEmail && String(userEmail).trim()) || undefined;
+    const safeAmount    = Number.isFinite(Number(totalCents)) ? Number(totalCents) : 0;
 
-      const returnUrl = metadata.returnUrl || `/books/${bookId}`;
-      const pageCount = metadata.page_count || metadata.pageCount || 12;
-      
-      // Create checkout session with dynamic pricing
-      const session = await stripeClient.checkout.sessions.create({
-        payment_method_types: ["card"],
-        line_items: [
-          {
-            price_data: {
-              currency: "gbp",
-              product_data: {
-                name: `Print & Ship - ${pageCount} Page Book`,
-                description: `Professional printed book shipped to ${metadata.shipping_country || 'your address'}. Includes digital download.`,
-              },
-              unit_amount: totalCents,
-            },
-            quantity: 1,
-          },
-        ],
-        mode: "payment",
-        success_url: `${WEB_URL}${returnUrl}?session_id={CHECKOUT_SESSION_ID}`,
-        cancel_url: `${WEB_URL}${returnUrl}?payment=cancelled`,
-        ...(userEmail && { customer_email: userEmail }),
-        metadata: {
-          type: "book_print",
-          book_id: bookId,
-          user_id: userId || `guest_${Date.now()}`,
-          page_count: pageCount.toString(),
-          lulu_print_cost: metadata.lulu_print_cost,
-          lulu_shipping_cost: metadata.lulu_shipping_cost,
-          print_markup: metadata.print_markup,
-          shipping_markup: metadata.shipping_markup,
-          ...metadata,
-        },
-        payment_intent_data: {
-          metadata: {
-            type: "book_print",
-            book_id: bookId,
-            user_id: userId || `guest_${Date.now()}`,
-          },
-        },
-      });
+    const pageCountRaw  = metadata.page_count ?? metadata.pageCount ?? 12;
+    const safePageCount = Number.isFinite(Number(pageCountRaw)) ? Number(pageCountRaw) : 12;
 
-      logger.info(
-        `Created print checkout session for user ${userId}: ${session.id}`
-      );
-      return session;
-    } catch (error) {
-      logger.error(
-        `Failed to create print checkout session: ${error.message}`
-      );
-      throw new Error(`Print checkout session creation failed: ${error.message}`);
-    }
+    const baseMeta = {
+      type: "book_print",
+      book_id: safeBookId,
+      user_id: safeUserId,
+      page_count: String(safePageCount),
+      lulu_print_cost: String(metadata.lulu_print_cost ?? ""),
+      lulu_shipping_cost: String(metadata.lulu_shipping_cost ?? ""),
+      print_markup: String(metadata.print_markup ?? ""),
+      shipping_markup: String(metadata.shipping_markup ?? ""),
+    };
+    const extraMeta = Object.fromEntries(
+      Object.entries(metadata || {}).map(([k, v]) => [k, String(v ?? "")])
+    );
+
+    const returnUrl = metadata.returnUrl || `/books/${safeBookId}`;
+
+    logger.info(`Creating print checkout session: £${(safeAmount / 100).toFixed(2)} for book ${safeBookId}`);
+
+    const session = await stripeClient.checkout.sessions.create({
+      mode: "payment",
+      payment_method_types: ["card"],
+      line_items: [{
+        price_data: {
+          currency: "gbp",
+          product_data: {
+            name: `Print & Ship - ${safePageCount} Page Book`,
+            description: `Professional printed book shipped to ${metadata.shipping_country || "your address"}. Includes digital download.`,
+          },
+          unit_amount: safeAmount,
+        },
+        quantity: 1,
+      }],
+      success_url: `${WEB_URL}${returnUrl}?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${WEB_URL}${returnUrl}?payment=cancelled`,
+      ...(safeEmail && { customer_email: safeEmail }),
+      metadata: { ...baseMeta, ...extraMeta },
+      payment_intent_data: { metadata: { type: "book_print", book_id: safeBookId, user_id: safeUserId } },
+    });
+
+    logger.info(`Created print checkout session for user ${safeUserId}: ${session.id}`);
+    return session;
+  } catch (error) {
+    logger.error(`Failed to create print checkout session: ${error.message}`);
+    throw new Error(`Print checkout session creation failed: ${error.message}`);
   }
+}
 
   /**
    * Create a generic checkout session (for backwards compatibility and special cases)
