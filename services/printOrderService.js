@@ -130,92 +130,87 @@ class PrintOrderService {
   /**
    * Create a Stripe checkout session for print order
    */
-  async createPrintOrderCheckout(userId, orderData) {
-  try {
-    // ✅ Prevent crash when guests don't have userId
-    userId = userId ? userId.toString() : null;
+    async createPrintOrderCheckout(userId, orderData) {
+    try {
+      // 🔒 Never let null/undefined reach Stripe or .toString()
+      const safeUserId = userId ? String(userId) : ""; // empty string instead of null
+      const {
+        bookId,
+        quantity,
+        shippingAddress,
+        shippingLevel,
+      } = orderData ?? {};
 
-    logger.info(`Creating print order checkout for user ${userId}`);
+      const qty = Number.isFinite(Number(quantity)) ? Number(quantity) : 1;
 
-      const { bookId, quantity, shippingAddress, shippingLevel } = orderData;
+      logger.info(`Creating print order checkout session`, {
+        userId: safeUserId || "(guest)",
+        bookId,
+        quantity: qty,
+        shippingLevel,
+      });
 
-      // Validate book exists and ensure bookId was passed correctly
-if (!bookId) {
-  throw new Error("Missing bookId in checkout request");
-}
+      // Validate book exists and user has access
+      const book = await Book.findById(bookId);
+      if (!book) {
+        throw new Error("Book not found");
+      }
 
-const book = await Book.findById(bookId);
-if (!book) {
-  logger.error(`Book not found in createPrintOrderCheckout`, { bookId, userId });
-  throw new Error(`Book not found for ID: ${bookId}`);
-}
+      // Treat several possible flags as "public"
+      const isPublic = !!(
+        book?.is_public === true ||
+        book?.isPublic === true ||
+        book?.visibility === "public" ||
+        book?.public === true ||
+        book?.is_template_public === true
+      );
 
-// Log book for debugging
-logger.info(`Book found for checkout`, {
-  bookId: book._id.toString(),
-  title: book.title,
-  is_public: book.is_public,
-  user_id: book.user_id,
-});
-// Treat several possible flags as "public"
-const isPublic =
-  !!(
-    book?.is_public === true ||
-    book?.isPublic === true ||
-    book?.visibility === "public" ||
-    book?.public === true ||
-    book?.is_template_public === true
-  );
+      // Normalise owner id field (user_id vs user vs owner/created_by)
+      const ownerId = (book?.user_id || book?.user || book?.owner || book?.created_by);
+      const isOwner = !!(ownerId && safeUserId && String(ownerId) === safeUserId);
 
-// Normalise owner id field (user_id vs user vs owner/created_by)
-const ownerId =
-  (book?.user_id || book?.user || book?.owner || book?.created_by);
-
-const isOwner =
-  !!(ownerId && userId && ownerId.toString() === userId.toString());
-
-if (!isOwner && !isPublic) {
-  throw new Error("You can only print your own books");
-}
+      if (!isOwner && !isPublic) {
+        throw new Error("You can only print your own books");
+      }
 
       if (book.generation_status !== "completed") {
         throw new Error("Book must be completed before printing");
       }
 
-      // Calculate cost
+      // Calculate cost with safe qty
       const costData = await this.calculateOrderCost(
         bookId,
-        quantity,
+        qty,
         shippingAddress,
         shippingLevel
       );
 
-      // Get user email
-      const user = await User.findById(userId);
-      const userEmail = user?.email;
+      // Get user email only if we actually have a user id
+      const user = safeUserId ? await User.findById(safeUserId) : null;
+      const userEmail = user?.email || undefined;
 
-      // Create Stripe checkout session with dynamic pricing
+      // ✅ Stripe requires strings in metadata; never call .toString() on maybe-null
       const metadata = {
         order_type: "print",
-        book_id: bookId,
-        user_id: userId,
-        quantity: quantity.toString(),
-        page_count: book.page_count.toString(),
-        shipping_level: shippingLevel,
-        shipping_country: shippingAddress.country_code,
-        shipping_city: shippingAddress.city,
-        shipping_state: shippingAddress.state_code,
-        shipping_postal_code: shippingAddress.postal_code,
-        lulu_print_cost: costData.lulu_print_cost.toString(),
-        lulu_shipping_cost: costData.lulu_shipping_cost.toString(),
-        print_markup: costData.print_markup_percentage.toString(),
-        shipping_markup: costData.shipping_markup_percentage.toString(),
+        book_id: String(bookId ?? ""),
+        user_id: safeUserId, // always a string ("" for guest)
+        quantity: String(qty),
+        page_count: String(book.page_count ?? ""),
+        shipping_level: String(shippingLevel ?? ""),
+        shipping_country: String(shippingAddress?.country_code ?? ""),
+        shipping_city: String(shippingAddress?.city ?? ""),
+        shipping_state: String(shippingAddress?.state_code ?? ""),
+        shipping_postal_code: String(shippingAddress?.postal_code ?? ""),
+        lulu_print_cost: String(costData.lulu_print_cost ?? ""),
+        lulu_shipping_cost: String(costData.lulu_shipping_cost ?? ""),
+        print_markup: String(costData.print_markup_percentage ?? ""),
+        shipping_markup: String(costData.shipping_markup_percentage ?? ""),
       };
 
       const session = await stripeService.createPrintCheckoutSession(
         bookId,
-        costData.total_cost_cents,
-        userId,
+        costData.total_cost_cents,    // number OK for Stripe amount
+        safeUserId,                   // never null
         userEmail,
         metadata
       );
@@ -223,7 +218,7 @@ if (!isOwner && !isPublic) {
       logger.info("Print order checkout session created", {
         sessionId: session.id,
         bookId,
-        userId,
+        userId: safeUserId || "(guest)",
         totalCostCents: costData.total_cost_cents,
       });
 
@@ -237,6 +232,7 @@ if (!isOwner && !isPublic) {
       throw new Error(`Failed to create print order checkout: ${error.message}`);
     }
   }
+
 
   /**
    * Create a new print order (called after successful payment)
