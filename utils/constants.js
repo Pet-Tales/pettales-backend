@@ -80,16 +80,20 @@ const LULU_BASE64_ENCODED_KEY_SECRET = process.env.LULU_BASE64_ENCODED_KEY_SECRE
 // Illustration Styles
 const ILLUST_ANIME =
   process.env.ILLUST_ANIME ||
-  "https://s3.us-east-1.amazonaws.com/pettales.ai/_static/illustration_styles/illust_anime_9.jpg";
+  "https://storage.pettales.ai/_static/illustration_styles/illust_anime_9.jpg";
+
 const ILLUST_DISNEY =
   process.env.ILLUST_DISNEY ||
-  "https://s3.us-east-1.amazonaws.com/pettales.ai/_static/illustration_styles/illust_disney_9.jpg";
+  "https://storage.pettales.ai/_static/illustration_styles/illust_disney_9.jpg";
+
 const ILLUST_VECTOR_ART =
   process.env.ILLUST_VECTOR_ART ||
-  "https://s3.us-east-1.amazonaws.com/pettales.ai/_static/illustration_styles/illust_vector_art_9.jpg";
+  "https://storage.pettales.ai/_static/illustration_styles/illust_vector_art_9.jpg";
+
 const ILLUST_CLASSIC_WATERCOLOR =
   process.env.ILLUST_CLASSIC_WATERCOLOR ||
-  "https://s3.us-east-1.amazonaws.com/pettales.ai/_static/illustration_styles/illust_classic_watercolor_1.jpg";
+  "https://storage.pettales.ai/_static/illustration_styles/illust_classic_watercolor_1.jpg";
+
 
 // Application Constants
 const DEFAULT_CREDITS_BALANCE = 10;  // DEPRECATED - keeping for migration reference only
