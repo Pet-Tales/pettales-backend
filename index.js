@@ -18,7 +18,7 @@ const {
   checkOptionalEnvVars,
 } = require("./utils/constants");
 
-// 🔹 add this import so we can bind Stripe webhook directly
+// Import Stripe webhook handler
 const { handleStripeWebhook } = require("./controllers/stripeWebhookController");
 
 const app = express();
@@ -32,12 +32,14 @@ connectDB();
 
 /* ============================================================
    🔹 Bind Stripe webhook BEFORE any body parsers
-   This ensures Stripe gets the raw body for signature verification.
-   (Leaves all other routes/middleware exactly as-is.)
    ============================================================ */
+app.post(
+  "/api/webhook/stripe",
+  express.raw({ type: "application/json" }),
+  handleStripeWebhook
+);
 
-
-// Middleware (unchanged)
+// Normal middleware (runs after Stripe webhook)
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
@@ -49,7 +51,7 @@ if (DEBUG_MODE) {
   app.use(morgan("common"));
 }
 
-// CORS configuration - allow multiple origins in production
+// CORS configuration
 const corsOrigins = DEBUG_MODE
   ? [WEB_URL]
   : [
@@ -72,7 +74,7 @@ app.use(passport.initialize());
 // Add user context to all requests
 app.use(authenticateUser);
 
-// Routes (unchanged)
+// Mount all routes
 app.use("/api", routes);
 
 app.get("/health", (req, res) => {
@@ -82,7 +84,7 @@ app.get("/health", (req, res) => {
   res.send(message);
 });
 
-// Debug endpoint to check cookies (only in debug mode)
+// Debug endpoint (only in debug mode)
 if (DEBUG_MODE) {
   app.get("/debug/cookies", (req, res) => {
     res.json({
@@ -98,7 +100,7 @@ if (DEBUG_MODE) {
   });
 }
 
-// Error handling middleware
+// Error handling
 app.use((err, _req, res, _next) => {
   logger.error(`Unhandled error: ${err}`);
   res.status(500).json({
@@ -107,10 +109,10 @@ app.use((err, _req, res, _next) => {
   });
 });
 
-// Start session cleanup service
+// Start background services
 sessionCleanup.startSessionCleanup();
 
-// Initialize webhook lifecycle service
+// Initialize webhook lifecycle
 const initializeWebhookService = async () => {
   try {
     logger.info("Initializing webhook lifecycle service...");
@@ -138,7 +140,7 @@ app
     process.exit(1);
   });
 
-// Graceful shutdown handling
+// Graceful shutdown
 process.on("SIGTERM", async () => {
   logger.info("SIGTERM received, shutting down gracefully");
   try {
