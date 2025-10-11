@@ -20,6 +20,13 @@ const {
 } = require("./utils/constants");
 
 const app = express();
+// Stripe webhook — must be BEFORE any body parsers
+app.post(
+  "/api/webhook/stripe",
+  express.raw({ type: "application/json" }),
+  stripeWebhookController
+);
+
 
 // Validate environment variables
 validateRequiredEnvVars();
@@ -34,12 +41,6 @@ connectDB();
 //    This MUST come BEFORE any body parsers (json, urlencoded, cookieParser).
 
 // 2) Normal parsers for the rest of the app
-// Stripe webhook — must be BEFORE any body parsers
-app.post(
-  "/api/webhook/stripe",
-  express.raw({ type: "application/json" }),
-  stripeWebhookController
-);
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
