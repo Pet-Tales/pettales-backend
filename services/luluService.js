@@ -312,7 +312,7 @@ class LuluService {
         },
         shipping_option: shippingLevel,
       };
-
+      requestData.currency = "GBP";
       const result = await this.makeRequest(
         "POST",
         "/print-job-cost-calculations/",
@@ -321,6 +321,8 @@ class LuluService {
 
       logger.info("Print cost calculation successful", {
         totalCostGBP: result.total_cost_incl_tax,
+        totalCostCurrency: "GBP",
+
         currency: result.currency,
       });
 
