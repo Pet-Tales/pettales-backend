@@ -63,6 +63,7 @@ app.use(passport.initialize());
 app.use(authenticateUser);
 
 // Routes
+app.use("/api/webhook", require("./routes/webhook"));
 app.use("/api", routes);
 
 app.get("/health", (req, res) => {
