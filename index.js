@@ -28,9 +28,16 @@ checkOptionalEnvVars();
 connectDB();
 
 // Middleware
+
+// 1) Stripe webhook must read the raw body for signature verification.
+//    This MUST come BEFORE any body parsers (json, urlencoded, cookieParser).
+app.use('/api/webhook/stripe', express.raw({ type: 'application/json' }));
+
+// 2) Normal parsers for the rest of the app
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
+
 
 // API Request Logging
 if (DEBUG_MODE) {
