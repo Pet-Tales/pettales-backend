@@ -35,11 +35,7 @@ connectDB();
    This ensures Stripe gets the raw body for signature verification.
    (Leaves all other routes/middleware exactly as-is.)
    ============================================================ */
-app.post(
-  "/api/webhook/stripe",
-  express.raw({ type: "application/json" }),
-  handleStripeWebhook
-);
+
 
 // Middleware (unchanged)
 app.use(express.json());
