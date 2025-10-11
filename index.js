@@ -21,7 +21,7 @@ const {
 } = require("./utils/constants");
 
 // ✅ Import Stripe webhook handler
-const { handleStripeWebhook } = require("./webhooks/stripeWebhook");
+const { handleStripeWebhook } = require("./webhook/stripeWebhook");
 
 validateRequiredEnvVars();
 checkOptionalEnvVars();
