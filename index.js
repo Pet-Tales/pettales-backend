@@ -27,7 +27,14 @@ checkOptionalEnvVars();
 // Connect to database
 connectDB();
 
-// Middleware
+/* ============================================================
+   🔔 WEBHOOK ROUTES MUST BE REGISTERED BEFORE BODY PARSERS
+   ============================================================ */
+app.use("/api/webhook", require("./routes/webhook"));
+
+/* ============================================================
+   NORMAL MIDDLEWARE (runs AFTER webhooks)
+   ============================================================ */
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
@@ -62,8 +69,9 @@ app.use(passport.initialize());
 // Add user context to all requests
 app.use(authenticateUser);
 
-// Routes
-app.use("/api/webhook", require("./routes/webhook"));
+/* ============================================================
+   MAIN API ROUTES
+   ============================================================ */
 app.use("/api", routes);
 
 app.get("/health", (req, res) => {
