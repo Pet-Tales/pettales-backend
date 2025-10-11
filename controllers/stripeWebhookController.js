@@ -55,23 +55,53 @@ const handleCheckoutSessionCompleted = async (session) => {
   try {
     const sessionType = session.metadata?.type;
     
-    // Handle print orders (new)
-    if (sessionType === "book_print") {
-      try {
-        // Process print order creation
-        await printOrderService.processPrintPaymentSuccess(session);
-        
-        // Also process as book purchase for the download entitlement
-        await bookPurchaseService.processPaymentSuccess(session);
-        
-        logger.info(
-          `Print order processed for session: ${session.id}`
-        );
-      } catch (e) {
-        logger.error(`Failed to process print order: ${e.message}`);
-      }
-      return;
-    }
+    // Handle print orders (book_print)
+if (sessionType === "book_print") {
+  try {
+    logger.info(`Processing print order for session ${session.id}`);
+
+    // Reconstruct full order data from metadata
+    const orderData = {
+      bookId: session.metadata.book_id,
+      quantity: parseInt(session.metadata.quantity) || 1,
+      shippingAddress: {
+        country_code: session.metadata.shipping_country,
+        city: session.metadata.shipping_city,
+        state_code: session.metadata.shipping_state,
+        postal_code: session.metadata.shipping_postal_code,
+        name:
+          session.shipping_details?.name ||
+          session.customer_details?.name ||
+          "Unknown",
+        line1: session.shipping_details?.address?.line1 || "",
+        line2: session.shipping_details?.address?.line2 || "",
+      },
+      shippingLevel: session.metadata.shipping_level,
+      costData: {
+        total_cost_cents: session.amount_total,
+        lulu_cost_gbp:
+          parseFloat(session.metadata.lulu_print_cost || 0) +
+          parseFloat(session.metadata.lulu_shipping_cost || 0),
+        print_markup_percentage: parseInt(session.metadata.print_markup || 0),
+      },
+    };
+
+    // 1) Create Lulu print order and submit job
+    await printOrderService.createPrintOrder(
+      session.metadata.user_id,
+      orderData,
+      session.id
+    );
+
+    // 2) Also mark as purchased for download entitlement
+    await bookPurchaseService.processPaymentSuccess(session);
+
+    logger.info(`✅ Lulu print job created for session ${session.id}`);
+  } catch (error) {
+    logger.error(`❌ Failed to process Lulu print order: ${error.message}`);
+  }
+  return;
+}
     
     // Handle book downloads (existing system)
     if (sessionType === "book_download") {
