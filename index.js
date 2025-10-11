@@ -18,6 +18,9 @@ const {
   checkOptionalEnvVars,
 } = require("./utils/constants");
 
+// 🔹 add this import so we can bind Stripe webhook directly
+const { handleStripeWebhook } = require("./controllers/stripeWebhookController");
+
 const app = express();
 
 // Validate environment variables
@@ -28,13 +31,17 @@ checkOptionalEnvVars();
 connectDB();
 
 /* ============================================================
-   🔔 Mount webhook routes BEFORE body parsers
+   🔹 Bind Stripe webhook BEFORE any body parsers
+   This ensures Stripe gets the raw body for signature verification.
+   (Leaves all other routes/middleware exactly as-is.)
    ============================================================ */
-app.use("/api/webhook", require("./routes/webhook"));
+app.post(
+  "/api/webhook/stripe",
+  express.raw({ type: "application/json" }),
+  handleStripeWebhook
+);
 
-/* ============================================================
-   NORMAL MIDDLEWARE (runs AFTER webhooks)
-   ============================================================ */
+// Middleware (unchanged)
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
@@ -69,9 +76,7 @@ app.use(passport.initialize());
 // Add user context to all requests
 app.use(authenticateUser);
 
-/* ============================================================
-   MAIN API ROUTES
-   ============================================================ */
+// Routes (unchanged)
 app.use("/api", routes);
 
 app.get("/health", (req, res) => {
@@ -116,4 +121,46 @@ const initializeWebhookService = async () => {
     await webhookLifecycleService.initialize();
     logger.info("Webhook lifecycle service initialized successfully");
   } catch (error) {
-    logger.error("Failed t
+    logger.error("Failed to initialize webhook lifecycle service:", error);
+    logger.warn(
+      "Server will continue without webhook registration. Use admin panel to register manually."
+    );
+  }
+};
+
+app
+  .listen(PORT, async () => {
+    logger.system(`Server started successfully`, {
+      port: PORT,
+      environment: DEBUG_MODE ? "development" : "production",
+      url: `http://127.0.0.1:${PORT}`,
+    });
+    await initializeWebhookService();
+  })
+  .on("error", (err) => {
+    logger.error(`Server startup error: ${err}`);
+    process.exit(1);
+  });
+
+// Graceful shutdown handling
+process.on("SIGTERM", async () => {
+  logger.info("SIGTERM received, shutting down gracefully");
+  try {
+    await webhookLifecycleService.cleanup();
+    logger.info("Webhook lifecycle service cleaned up");
+  } catch (error) {
+    logger.error("Error during webhook cleanup:", error);
+  }
+  process.exit(0);
+});
+
+process.on("SIGINT", async () => {
+  logger.info("SIGINT received, shutting down gracefully");
+  try {
+    await webhookLifecycleService.cleanup();
+    logger.info("Webhook lifecycle service cleaned up");
+  } catch (error) {
+    logger.error("Error during webhook cleanup:", error);
+  }
+  process.exit(0);
+});
