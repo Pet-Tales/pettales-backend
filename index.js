@@ -1,10 +1,7 @@
-// index.js
 const express = require("express");
 const cors = require("cors");
 const cookieParser = require("cookie-parser");
 const morgan = require("morgan");
-const bodyParser = require("body-parser");
-
 const logger = require("./utils/logger");
 const passport = require("./config/passport");
 const connectDB = require("./config/database");
@@ -20,46 +17,131 @@ const {
   checkOptionalEnvVars,
 } = require("./utils/constants");
 
-// ✅ Import Stripe webhook handler
-const { handleStripeWebhook } = require("./controllers/stripeWebhookController");
-
-validateRequiredEnvVars();
-checkOptionalEnvVars();
-connectDB();
-
 const app = express();
 
-// ✅ CORS first
-app.use(cors({ origin: WEB_URL, credentials: true }));
+// Validate env vars
+validateRequiredEnvVars();
+checkOptionalEnvVars();
 
-// ✅ Stripe webhook route BEFORE body parsing middleware
-app.post(
-  "/api/webhook/stripe",
-  bodyParser.raw({ type: "application/json" }),
-  handleStripeWebhook
+// Connect database
+connectDB();
+
+// Middleware
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+app.use(cookieParser());
+
+// Logging
+if (DEBUG_MODE) {
+  app.use(morgan("dev"));
+} else {
+  app.use(morgan("common"));
+}
+
+// CORS
+const corsOrigins = DEBUG_MODE
+  ? [WEB_URL]
+  : [
+      "https://pettales.ai",
+      "https://www.pettales.ai",
+      "https://staging.pettales.ai",
+      WEB_URL,
+    ].filter(Boolean);
+
+app.use(
+  cors({
+    origin: corsOrigins,
+    credentials: true,
+  })
 );
 
-// ✅ Everything else uses normal JSON parsing
-app.use(express.json({ limit: "50mb" }));
-app.use(cookieParser());
-app.use(morgan("dev"));
+// Passport
 app.use(passport.initialize());
 
-// ✅ Mount your normal routes
+// Auth middleware
+app.use(authenticateUser);
+
+// Main routes
 app.use("/api", routes);
 
-// ✅ Health check
-app.get("/health", (req, res) => res.status(200).json({ status: "ok" }));
-
-// ✅ Error handling middleware
-app.use((err, req, res, next) => {
-  logger.error(err);
-  res.status(500).json({ message: "Internal server error", error: err.message });
+// Health check
+app.get("/health", (req, res) => {
+  const environment = DEBUG_MODE ? "Staging" : "Production";
+  const message = `Greetings from PetTalesAI! - ${environment} Environment`;
+  logger.info(`Health check accessed from ${req.ip}`);
+  res.send(message);
 });
 
-// ✅ Start server
-app.listen(PORT, () => {
-  logger.info(`🚀 Server running on port ${PORT}`);
-  sessionCleanup();
-  webhookLifecycleService.start();
+// Debug (optional)
+if (DEBUG_MODE) {
+  app.get("/debug/cookies", (req, res) => {
+    res.json({
+      cookies: req.cookies,
+      headers: req.headers,
+      user: req.user || null,
+    });
+  });
+}
+
+// Error handling
+app.use((err, _req, res, _next) => {
+  logger.error(`Unhandled error: ${err}`);
+  res.status(500).json({
+    success: false,
+    message: "Internal server error",
+  });
+});
+
+// Start session cleanup
+sessionCleanup.startSessionCleanup();
+
+// Webhook lifecycle init
+const initializeWebhookService = async () => {
+  try {
+    logger.info("Initializing webhook lifecycle service...");
+    await webhookLifecycleService.initialize();
+    logger.info("Webhook lifecycle service initialized successfully");
+  } catch (error) {
+    logger.error("Failed to initialize webhook lifecycle service:", error);
+    logger.warn(
+      "Server will continue without webhook registration. Use admin panel to register manually."
+    );
+  }
+};
+
+app
+  .listen(PORT, async () => {
+    logger.system(`Server started successfully`, {
+      port: PORT,
+      environment: DEBUG_MODE ? "development" : "production",
+      url: `http://127.0.0.1:${PORT}`,
+    });
+    await initializeWebhookService();
+  })
+  .on("error", (err) => {
+    logger.error(`Server startup error: ${err}`);
+    process.exit(1);
+  });
+
+// Graceful shutdown
+process.on("SIGTERM", async () => {
+  logger.info("SIGTERM received, shutting down gracefully");
+  try {
+    await webhookLifecycleService.cleanup();
+    logger.info("Webhook lifecycle service cleaned up");
+  } catch (error) {
+    logger.error("Error during webhook cleanup:", error);
+  }
+  process.exit(0);
+});
+
+process.on("SIGINT", async () => {
+  logger.info("SIGINT received, shutting down gracefully");
+  try {
+    await webhookLifecycleService.cleanup();
+    logger.info("Webhook lifecycle service cleaned up");
+  } catch (error) {
+    logger.error("Error during webhook cleanup:", error);
+  }
+  process.exit(0);
 });
