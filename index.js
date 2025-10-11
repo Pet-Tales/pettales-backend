@@ -28,7 +28,7 @@ checkOptionalEnvVars();
 connectDB();
 
 /* ============================================================
-   🔔 WEBHOOK ROUTES MUST BE REGISTERED BEFORE BODY PARSERS
+   🔔 Mount webhook routes BEFORE body parsers
    ============================================================ */
 app.use("/api/webhook", require("./routes/webhook"));
 
@@ -116,46 +116,4 @@ const initializeWebhookService = async () => {
     await webhookLifecycleService.initialize();
     logger.info("Webhook lifecycle service initialized successfully");
   } catch (error) {
-    logger.error("Failed to initialize webhook lifecycle service:", error);
-    logger.warn(
-      "Server will continue without webhook registration. Use admin panel to register manually."
-    );
-  }
-};
-
-app
-  .listen(PORT, async () => {
-    logger.system(`Server started successfully`, {
-      port: PORT,
-      environment: DEBUG_MODE ? "development" : "production",
-      url: `http://127.0.0.1:${PORT}`,
-    });
-    await initializeWebhookService();
-  })
-  .on("error", (err) => {
-    logger.error(`Server startup error: ${err}`);
-    process.exit(1);
-  });
-
-// Graceful shutdown handling
-process.on("SIGTERM", async () => {
-  logger.info("SIGTERM received, shutting down gracefully");
-  try {
-    await webhookLifecycleService.cleanup();
-    logger.info("Webhook lifecycle service cleaned up");
-  } catch (error) {
-    logger.error("Error during webhook cleanup:", error);
-  }
-  process.exit(0);
-});
-
-process.on("SIGINT", async () => {
-  logger.info("SIGINT received, shutting down gracefully");
-  try {
-    await webhookLifecycleService.cleanup();
-    logger.info("Webhook lifecycle service cleaned up");
-  } catch (error) {
-    logger.error("Error during webhook cleanup:", error);
-  }
-  process.exit(0);
-});
+    logger.error("Failed t
