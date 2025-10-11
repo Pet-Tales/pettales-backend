@@ -368,14 +368,18 @@ class PrintOrderService {
         },
       };
 
-      // Create the print order
+      // Create print order record and submit Lulu job
       const result = await this.createPrintOrder(
         metadata.user_id,
         orderData,
         stripeSession.id
       );
 
-      logger.info("Print order created from Stripe webhook", {
+      if (!result || !result.printOrder) {
+        throw new Error("Print order creation returned no result");
+      }
+
+      logger.info("✅ Lulu print job created after Stripe payment", {
         printOrderId: result.printOrder._id,
         stripeSessionId: stripeSession.id,
       });
