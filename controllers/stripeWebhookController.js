@@ -1,7 +1,6 @@
 const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 const logger = require("../utils/logger");
 const printOrderService = require("../services/printOrderService");
-const { buffer } = require("micro"); // ensure body is not parsed
 
 module.exports.handleStripeWebhook = async (req, res) => {
   try {
