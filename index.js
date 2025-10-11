@@ -20,13 +20,6 @@ const {
 } = require("./utils/constants");
 
 const app = express();
-// Stripe webhook — must be BEFORE any body parsers
-app.post(
-  "/api/webhook/stripe",
-  express.raw({ type: "application/json" }),
-  stripeWebhookController
-);
-
 
 // Validate environment variables
 validateRequiredEnvVars();
@@ -35,17 +28,24 @@ checkOptionalEnvVars();
 // Connect to database
 connectDB();
 
+// --------------------
 // Middleware
+// --------------------
 
 // 1) Stripe webhook must read the raw body for signature verification.
 //    This MUST come BEFORE any body parsers (json, urlencoded, cookieParser).
 
-// 2) Normal parsers for the rest of the app
+// Stripe webhook — must be BEFORE any body parsers
+app.post(
+  "/api/webhook/stripe",
+  express.raw({ type: "application/json" }),
+  stripeWebhookController
+);
 
+// 2) Normal parsers for the rest of the app
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
-
 
 // API Request Logging
 if (DEBUG_MODE) {
