@@ -7,6 +7,7 @@ const logger = require("./utils/logger");
 const passport = require("./config/passport");
 const connectDB = require("./config/database");
 const routes = require("./routes");
+const stripeWebhookController = require("./controllers/stripeWebhookController");
 const { authenticateUser } = require("./middleware");
 const { sessionCleanup } = require("./services");
 const webhookLifecycleService = require("./services/webhookLifecycleService");
@@ -31,9 +32,15 @@ connectDB();
 
 // 1) Stripe webhook must read the raw body for signature verification.
 //    This MUST come BEFORE any body parsers (json, urlencoded, cookieParser).
-app.use('/api/webhook/stripe', express.raw({ type: 'application/json' }));
 
 // 2) Normal parsers for the rest of the app
+// Stripe webhook — must be BEFORE any body parsers
+app.post(
+  "/api/webhook/stripe",
+  express.raw({ type: "application/json" }),
+  stripeWebhookController
+);
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
