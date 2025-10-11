@@ -3,6 +3,7 @@ const authRoutes = require("./auth");
 const userRoutes = require("./user");
 const characterRoutes = require("./character");
 const bookRoutes = require("./book");
+const webhookRoutes = require("./webhook");
 const webhookManagementRoutes = require("./webhookManagement");
 const pageRoutes = require("./page");
 const galleryRoutes = require("./gallery");
@@ -44,7 +45,8 @@ router.use("/contact", contactRoutes);
 // Mount print order routes
 router.use("/print-orders", printOrderRoutes);
 
-// ✅ REMOVED webhook routes here (moved to top-level in index.js)
+// Mount webhook routes
+router.use("/webhook", webhookRoutes);
 
 // Admin webhook management routes
 router.use("/admin/webhooks", webhookManagementRoutes);
