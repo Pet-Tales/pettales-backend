@@ -7,7 +7,6 @@ const logger = require("./utils/logger");
 const passport = require("./config/passport");
 const connectDB = require("./config/database");
 const routes = require("./routes");
-const stripeWebhookController = require("./controllers/stripeWebhookController");
 const { authenticateUser } = require("./middleware");
 const { sessionCleanup } = require("./services");
 const webhookLifecycleService = require("./services/webhookLifecycleService");
@@ -28,31 +27,15 @@ checkOptionalEnvVars();
 // Connect to database
 connectDB();
 
-// --------------------
 // Middleware
-// --------------------
-
-// 1) Stripe webhook must read the raw body for signature verification.
-//    This MUST come BEFORE any body parsers (json, urlencoded, cookieParser).
-
-// Stripe webhook — must be BEFORE any body parsers
-app.post(
-  "/api/webhook/stripe",
-  express.raw({ type: "application/json" }),
-  stripeWebhookController
-);
-
-// 2) Normal parsers for the rest of the app
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
 // API Request Logging
 if (DEBUG_MODE) {
-  // Detailed logging for development
   app.use(morgan("dev"));
 } else {
-  // Concise logging for production
   app.use(morgan("common"));
 }
 
@@ -63,13 +46,13 @@ const corsOrigins = DEBUG_MODE
       "https://pettales.ai",
       "https://www.pettales.ai",
       "https://staging.pettales.ai",
-      WEB_URL, // Include the configured WEB_URL as well
-    ].filter(Boolean); // Remove any undefined values
+      WEB_URL,
+    ].filter(Boolean);
 
 app.use(
   cors({
     origin: corsOrigins,
-    credentials: true, // Allow cookies
+    credentials: true,
   })
 );
 
@@ -125,7 +108,6 @@ const initializeWebhookService = async () => {
     logger.info("Webhook lifecycle service initialized successfully");
   } catch (error) {
     logger.error("Failed to initialize webhook lifecycle service:", error);
-    // Don't exit the process, webhook can be registered manually later
     logger.warn(
       "Server will continue without webhook registration. Use admin panel to register manually."
     );
@@ -139,8 +121,6 @@ app
       environment: DEBUG_MODE ? "development" : "production",
       url: `http://127.0.0.1:${PORT}`,
     });
-
-    // Initialize webhook service after server starts
     await initializeWebhookService();
   })
   .on("error", (err) => {
@@ -151,26 +131,22 @@ app
 // Graceful shutdown handling
 process.on("SIGTERM", async () => {
   logger.info("SIGTERM received, shutting down gracefully");
-
   try {
     await webhookLifecycleService.cleanup();
     logger.info("Webhook lifecycle service cleaned up");
   } catch (error) {
     logger.error("Error during webhook cleanup:", error);
   }
-
   process.exit(0);
 });
 
 process.on("SIGINT", async () => {
   logger.info("SIGINT received, shutting down gracefully");
-
   try {
     await webhookLifecycleService.cleanup();
     logger.info("Webhook lifecycle service cleaned up");
   } catch (error) {
     logger.error("Error during webhook cleanup:", error);
   }
-
   process.exit(0);
 });
