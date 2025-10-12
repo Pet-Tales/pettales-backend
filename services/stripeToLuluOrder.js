@@ -1,3 +1,4 @@
+// services/stripeToLuluOrder.js
 const logger = require("../utils/logger");
 const luluService = require("./luluService");
 const printReadyPDFService = require("./printReadyPDFService");
@@ -7,59 +8,58 @@ async function createFromCheckout(session, meta = {}) {
   try {
     logger.info("🧾 Stripe→Lulu: Starting order creation", { sessionId: session.id });
 
-    // Ensure we have metadata from Stripe checkout
     if (!meta.book_id || !meta.user_id) {
       logger.error("❌ Missing metadata from Stripe session");
       return;
     }
 
-    // Fetch full book record for backup data
-    const bookDoc = await Book.findById(meta.book_id).lean();
+    const book = await Book.findById(meta.book_id);
+    if (!book) throw new Error(`Book not found: ${meta.book_id}`);
 
-    // Map shipping address (Stripe → Lulu format)
-    const shipping = mapAddress(session.customer_details, session.shipping_details);
-
-    // Generate print-ready PDFs for Lulu
     const pdfs = await printReadyPDFService.generatePrintReadyPDFs(
       meta.book_id,
       meta.user_id
     );
 
-    const orderData = {
-      title: meta.book_title || bookDoc?.title || "Untitled Book",
-      cover_pdf_url: pdfs.coverPdfUrl,
-      interior_pdf_url: pdfs.interiorPdfUrl,
-      shipping_address: shipping,
-      shipping_level: "MAIL", // Lulu default
-      quantity: 1,
-      external_id: session.id,
+    const addr = session?.shipping_details?.address || {};
+    const recipient = {
+      name: session?.shipping_details?.name || session?.customer_details?.name || "",
+      email: session?.customer_details?.email || "",
+      phone_number: session?.customer_details?.phone || "",
+      street1: addr.line1 || "",
+      street2: addr.line2 || "",
+      city: addr.city || "",
+      state_code: addr.state || addr.region || "",
+      postcode: addr.postal_code || "",
+      country_code: addr.country || "GB",
     };
 
-    logger.info("📦 Stripe→Lulu: Sending order data to Lulu", { orderData });
+    const orderData = {
+      title: book.title || "Pet Tales Book",
+      package_id: process.env.LULU_POD_PACKAGE_ID,
+      recipient,
+      shipping_level: meta.shipping_level || "MAIL",
+      quantity: Number(meta.quantity) || 1,
+      external_id: session.id,
+      line_items: [
+        {
+          title: book.title || "Untitled Book",
+          cover_pdf: pdfs.coverPdfUrl,
+          interior_pdf: pdfs.interiorPdfUrl,
+          page_count: book.page_count || 12,
+        },
+      ],
+    };
 
+    logger.info("📦 Sending order to Lulu", { orderData });
     const luluOrder = await luluService.createPrintJob(orderData);
-    logger.info("✅ Lulu print order created successfully", { luluOrderId: luluOrder?.id });
+    logger.info("✅ Lulu order created successfully", { luluOrderId: luluOrder?.id });
 
     return luluOrder;
   } catch (err) {
-    logger.error("❌ Failed to create order from checkout", { error: err.message, stack: err.stack });
+    logger.error("❌ Failed to create Lulu order", { error: err.message, stack: err.stack });
     throw err;
   }
-}
-
-function mapAddress(customerDetails, shippingDetails) {
-  const a = shippingDetails?.address || customerDetails?.address || {};
-  return {
-    name: (shippingDetails?.name || customerDetails?.name) ?? "",
-    email: customerDetails?.email ?? "",
-    phone_number: customerDetails?.phone ?? "",
-    street1: a.line1 ?? "",
-    street2: a.line2 ?? "",
-    city: a.city ?? "",
-    state_code: a.state || a.state_code || a.region || a.province || "",
-    postcode: a.postal_code || a.postcode || "",
-    country_code: a.country ?? "",
-  };
 }
 
 module.exports = { createFromCheckout };
