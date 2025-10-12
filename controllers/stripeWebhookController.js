@@ -1,49 +1,79 @@
+// controllers/stripeWebhookController.js
 const Stripe = require("stripe");
 const logger = require("../utils/logger");
-const { STRIPE_SECRET_KEY } = require("../utils/constants");
-const { createFromCheckout } = require("../services/stripeToLuluOrder");
+const {
+  STRIPE_SECRET_KEY,
+} = require("../utils/constants");
+const printOrderService = require("../services/printOrderService");
 
-const stripe = new Stripe(STRIPE_SECRET_KEY);
+// Important: index.js must use express.raw({ type: 'application/json' }) for this route
+const stripe = new Stripe(STRIPE_SECRET_KEY, { apiVersion: "2024-06-20" });
 
+/**
+ * Stripe webhook handler
+ * Expects raw buffer body and `stripe-signature` header set by Stripe.
+ */
 const handleStripeWebhook = async (req, res) => {
+  let event;
+
   try {
     const signature = req.headers["stripe-signature"];
     if (!signature) {
-      logger.error("Missing stripe-signature header");
-      return res.status(400).send("Missing signature");
+      logger.error("Stripe webhook: Missing stripe-signature header");
+      return res.status(400).send("Missing Stripe signature");
     }
 
-    // req.body is a Buffer because of express.raw in index.js
-    const event = stripe.webhooks.constructEvent(
+    // NOTE: req.body must be a Buffer (express.raw)
+    event = stripe.webhooks.constructEvent(
       req.body,
       signature,
       process.env.STRIPE_WEBHOOK_SECRET
     );
+  } catch (err) {
+    logger.error(`Stripe webhook signature verification failed: ${err.message}`);
+    return res.status(400).send(`Webhook Error: ${err.message}`);
+  }
 
+  try {
     logger.info(`🔔 Stripe event received: ${event.type}`);
 
-    if (event.type === "checkout.session.completed") {
-      const session = event.data.object;
+    switch (event.type) {
+      case "checkout.session.completed": {
+        const session = event.data.object;
 
-      // Expand to include full details we’ll need for Lulu
-      const fullSession = await stripe.checkout.sessions.retrieve(session.id, {
-        expand: ["customer_details", "shipping_details", "payment_intent"],
-      });
+        // We only process our print orders (guard via metadata.type)
+        const meta = session.metadata || {};
+        if (meta.type === "book_print") {
+          logger.info(
+            `Stripe webhook: print order payment completed for session ${session.id}, book ${meta.book_id}`
+          );
+          await printOrderService.processPrintPaymentSuccess(session);
+        } else {
+          logger.info(
+            `Stripe webhook: checkout.session.completed ignored (type=${meta.type || "n/a"})`
+          );
+        }
+        break;
+      }
 
-      // 🔹 Create Lulu order
-      await createFromCheckout(fullSession);
-      logger.info(`✅ Lulu print order triggered for session ${session.id}`);
-    } else if (event.type === "payment_intent.succeeded") {
-      logger.info(`💰 Payment succeeded: ${event.data.object.id}`);
-    } else {
-      logger.info(`ℹ️ Unhandled Stripe event type: ${event.type}`);
+      // Optional: react to payment_intent.succeeded if you use Payment Intents directly
+      case "payment_intent.succeeded": {
+        // no-op for now; we rely on Checkout Session above
+        break;
+      }
+
+      default:
+        // Intentionally ignore other events
+        break;
     }
 
-    return res.status(200).send("OK");
+    return res.json({ received: true });
   } catch (err) {
-    logger.error(`❌ Stripe webhook error: ${err.message}`);
-    return res.status(400).send(`Webhook Error: ${err.message}`);
+    logger.error(`Stripe webhook processing error: ${err.stack || err.message}`);
+    return res.status(500).send("Webhook handler failed");
   }
 };
 
-module.exports = { handleStripeWebhook };
+module.exports = {
+  handleStripeWebhook,
+};
