@@ -58,8 +58,23 @@ app.use((err, req, res, next) => {
 const port = PORT || 5000;
 app.listen(port, () => {
   logger.info(`Server running on port ${port}`);
-  sessionCleanup.start();
-  webhookLifecycleService.start();
+
+  // 🩹 Safely start background services without crashing if missing
+  if (sessionCleanup) {
+    if (typeof sessionCleanup === "function") {
+      sessionCleanup();
+    } else if (typeof sessionCleanup.start === "function") {
+      sessionCleanup.start();
+    } else {
+      logger.warn("Session cleanup service not started (no valid export found)");
+    }
+  }
+
+  if (webhookLifecycleService && typeof webhookLifecycleService.start === "function") {
+    webhookLifecycleService.start();
+  } else {
+    logger.warn("Webhook lifecycle service not started (no valid export found)");
+  }
 });
 
 module.exports = app;
