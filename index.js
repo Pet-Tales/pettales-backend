@@ -41,8 +41,6 @@ connectDB();
 // Routes
 app.use("/api", routes);
 
-// Stripe webhook (registered separately)
-app.post("/api/webhook/stripe", handleStripeWebhook);
 
 // Health endpoint
 app.get("/health", (req, res) => {
