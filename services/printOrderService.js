@@ -1,268 +1,319 @@
+// services/printOrderService.js
 const mongoose = require("mongoose");
 const { PrintOrder, Book, User } = require("../models");
 const luluService = require("./luluService");
 const stripeService = require("./stripeService");
 const printReadyPDFService = require("./printReadyPDFService");
 const logger = require("../utils/logger");
-const { PRINT_MARKUP_PERCENTAGE, SHIPPING_MARKUP_PERCENTAGE } = require("../utils/constants");
+const {
+  PRINT_MARKUP_PERCENTAGE,
+  SHIPPING_MARKUP_PERCENTAGE,
+  CURRENCY, // e.g. "usd" or "gbp"
+} = require("../utils/constants");
 
+/**
+ * Utilities
+ */
+const toCents = (num) => Math.round(Number(num || 0) * 100);
+const centsToFloat = (c) => Math.round(c) / 100;
+
+/**
+ * PrintOrderService:
+ * - Calculates Lulu print + shipping cost (with markup)
+ * - Creates Stripe Checkout at the exact computed total
+ * - On payment success (webhook), generates PDFs and submits a Lulu print job
+ */
 class PrintOrderService {
   /**
-   * Calculate order cost including markup
+   * Calculate order cost using Lulu (print + shipping) and apply markup.
+   * Returns a shape with both cents and floats for convenience.
    */
   async calculateOrderCost(bookId, quantity, shippingAddress, shippingLevel) {
     try {
       logger.info(
-        `Calculating order cost for book ${bookId}, quantity: ${quantity}`
+        `Calculating Lulu costs for book=${bookId} qty=${quantity} level=${shippingLevel}`
       );
 
-      // Get book details
       const book = await Book.findById(bookId);
-      if (!book) {
-        throw new Error("Book not found");
-      }
+      if (!book) throw new Error("Book not found");
 
-      // First, get available shipping options for the destination
-      logger.info("Getting available shipping options for destination", {
-        country: shippingAddress.country_code,
-        requestedShippingLevel: shippingLevel,
-      });
-
-      const availableShippingOptions = await luluService.getShippingOptions(
-        shippingAddress,
-        book.page_count,
-        quantity
-      );
-
-      // Validate that the requested shipping level is available
-      const isShippingLevelAvailable = availableShippingOptions.some(
-        (option) => option.level === shippingLevel
-      );
-
-      if (!isShippingLevelAvailable) {
-        const availableLevels = availableShippingOptions.map(
-          (option) => option.level
-        );
-        logger.error("Requested shipping level not available", {
-          requestedLevel: shippingLevel,
-          availableLevels,
-          country: shippingAddress.country_code,
-          totalOptionsFound: availableShippingOptions.length,
-        });
-        throw new Error(
-          `Shipping level "${shippingLevel}" is not available for ${
-            shippingAddress.country_code
-          }. Available options: ${availableLevels.join(", ") || "None"}`
-        );
-      }
-
-      // Calculate cost with validated shipping option
-      logger.info("Calculating cost with validated shipping option", {
-        bookPageCount: book.page_count,
+      // 1) Base costs from Lulu
+      const luluCost = await luluService.calculateCost({
+        pageCount: book.page_count || book.pageCount || 12,
         quantity,
         shippingLevel,
-        country: shippingAddress.country_code,
+        shippingAddress,
       });
+      // Expecting: { print_cost: number, shipping_cost: number, currency: 'usd'|'gbp'... }
+      if (!luluCost || luluCost.print_cost == null || luluCost.shipping_cost == null) {
+        throw new Error("Lulu cost API returned invalid data");
+      }
 
-      const luluCostData = await luluService.calculatePrintCost(
-        book.page_count,
+      // 2) Apply markups
+      const printMarkupMult = 1 + (PRINT_MARKUP_PERCENTAGE || 0) / 100;
+      const shipMarkupMult = 1 + (SHIPPING_MARKUP_PERCENTAGE || 0) / 100;
+
+      const printCostCents = toCents(luluCost.print_cost);
+      const shipCostCents = toCents(luluCost.shipping_cost);
+
+      const printWithMarkupCents = Math.round(printCostCents * printMarkupMult);
+      const shipWithMarkupCents = Math.round(shipCostCents * shipMarkupMult);
+
+      const total_cents = printWithMarkupCents + shipWithMarkupCents;
+
+      return {
+        currency: (luluCost.currency || CURRENCY || "usd").toLowerCase(),
+        quantity,
+        lulu_print_cost_cents: printCostCents,
+        lulu_shipping_cost_cents: shipCostCents,
+        print_markup_percent: PRINT_MARKUP_PERCENTAGE || 0,
+        shipping_markup_percent: SHIPPING_MARKUP_PERCENTAGE || 0,
+        total_cost_cents: total_cents,
+
+        // helpful floats for UI/logs
+        lulu_print_cost: centsToFloat(printCostCents),
+        lulu_shipping_cost: centsToFloat(shipCostCents),
+        total_cost: centsToFloat(total_cents),
+      };
+    } catch (err) {
+      logger.error(`calculateOrderCost failed: ${err.stack || err.message}`);
+      throw err;
+    }
+  }
+
+  /**
+   * Controller calls this to start the Stripe Checkout flow for printing.
+   * It MUST be wired to POST /api/print-orders/create-checkout.
+   */
+  async createPrintOrderCheckout({
+    userId,
+    bookId,
+    quantity = 1,
+    shippingLevel,
+    shippingAddress,
+  }) {
+    const session = await mongoose.startSession();
+    session.startTransaction();
+    try {
+      const user = await User.findById(userId).session(session);
+      if (!user) throw new Error("User not found");
+
+      const book = await Book.findById(bookId).session(session);
+      if (!book) throw new Error("Book not found");
+
+      // 1) Calculate Lulu cost w/ markups
+      const cost = await this.calculateOrderCost(
+        bookId,
         quantity,
         shippingAddress,
         shippingLevel
       );
 
-      // Calculate costs with markup
-      const luluPrintCost = parseFloat(luluCostData.line_item_costs?.[0]?.total_cost_incl_tax || 0);
-      const luluShippingCost = parseFloat(luluCostData.shipping_cost?.total_cost_incl_tax || 0);
-      const luluTotalCost = parseFloat(luluCostData.total_cost_incl_tax);
+      // 2) Prepare metadata for webhook reconstruction
+      const metadata = {
+        type: "book_print",
+        book_id: String(book._id),
+        user_id: String(user._id),
+        page_count: String(book.page_count || book.pageCount || 12),
+        quantity: String(quantity),
+        shipping_level: String(shippingLevel || ""),
+        shipping_country: String(shippingAddress?.country || ""),
+        shipping_city: String(shippingAddress?.city || ""),
+        shipping_state: String(shippingAddress?.state || ""),
+        shipping_postal_code: String(shippingAddress?.postal_code || shippingAddress?.postalCode || ""),
 
-      // Apply markups
-      const printMarkupPercentage = PRINT_MARKUP_PERCENTAGE || 100;
-      const shippingMarkupPercentage = SHIPPING_MARKUP_PERCENTAGE || 5;
-
-      const printCostWithMarkup = luluPrintCost * (1 + printMarkupPercentage / 100);
-      const shippingCostWithMarkup = luluShippingCost * (1 + shippingMarkupPercentage / 100);
-      const totalCostGBP = printCostWithMarkup + shippingCostWithMarkup;
-      const totalCostCents = Math.ceil(totalCostGBP * 100);
-
-      const costBreakdown = {
-        book_id: bookId,
-        book_title: book.title,
-        page_count: book.page_count,
-        quantity: quantity,
-        lulu_cost_gbp: luluTotalCost,
-        lulu_print_cost: luluPrintCost,
-        lulu_shipping_cost: luluShippingCost,
-        print_markup_percentage: printMarkupPercentage,
-        shipping_markup_percentage: shippingMarkupPercentage,
-        total_cost_gbp: totalCostGBP,
-        total_cost_cents: totalCostCents,
-        shipping_level: shippingLevel,
-        currency: luluCostData.currency,
-        cost_breakdown: {
-          line_items: luluCostData.line_item_costs,
-          shipping: luluCostData.shipping_cost,
-          fulfillment: luluCostData.fulfillment_cost,
-          fees: luluCostData.fees || [],
-        },
-        display_print_cost_gbp: printCostWithMarkup,
-        display_shipping_cost_gbp: shippingCostWithMarkup,
+        lulu_print_cost: String(cost.lulu_print_cost), // floats for human read
+        lulu_shipping_cost: String(cost.lulu_shipping_cost),
+        print_markup: String(cost.print_markup_percent),
+        shipping_markup: String(cost.shipping_markup_percent),
+        currency: String(cost.currency),
       };
 
-      logger.info("Order cost calculated successfully", {
-        bookId,
-        lulu_print_cost: luluPrintCost,
-        lulu_shipping_cost: luluShippingCost,
-        display_print_cost_gbp: printCostWithMarkup,
-        display_shipping_cost_gbp: shippingCostWithMarkup,
-        total_cost_gbp: totalCostGBP,
-        totalCostCents,
-        luluTotalCost,
-      });
+      // 3) Create Stripe Checkout at the exact computed total
+      const checkoutUrl = await stripeService.createPrintCheckoutSession(
+        String(book._id),
+        cost.total_cost_cents,
+        String(user._id),
+        user.email,
+        metadata,
+        cost.currency
+      );
 
-      return costBreakdown;
-    } catch (error) {
-      logger.error("Failed to calculate order cost:", error.message);
-      throw new Error(`${error.message.replace("Error: ", "")}`);
+      await session.commitTransaction();
+      return { url: checkoutUrl };
+    } catch (err) {
+      await session.abortTransaction();
+      logger.error(`createPrintOrderCheckout failed: ${err.stack || err.message}`);
+      throw err;
+    } finally {
+      session.endSession();
     }
   }
 
   /**
-   * Create a Stripe checkout session for print order
+   * Webhook path: called on checkout.session.completed (type === book_print).
+   * Rebuild order data from the session + metadata, generate PDFs, submit Lulu job,
+   * and persist PrintOrder with Lulu job ID.
    */
-    async createPrintOrderCheckout(userId, orderData) {
+  async processPrintPaymentSuccess(stripeSession) {
+    const session = await mongoose.startSession();
+    session.startTransaction();
     try {
-      // 🔒 Never let null/undefined reach Stripe or .toString()
-      const safeUserId = userId ? String(userId) : ""; // empty string instead of null
-      const {
-        bookId,
-        quantity,
-        shippingAddress,
-        shippingLevel,
-      } = orderData ?? {};
+      const meta = stripeSession.metadata || {};
+      const userId = meta.user_id;
+      const bookId = meta.book_id;
 
-      const qty = Number.isFinite(Number(quantity)) ? Number(quantity) : 1;
+      const user = await User.findById(userId).session(session);
+      if (!user) throw new Error("User not found on webhook");
 
-      logger.info(`Creating print order checkout session`, {
-        userId: safeUserId,
-        bookId,
-        quantity: qty,
-        shippingLevel,
-      });
+      const book = await Book.findById(bookId).session(session);
+      if (!book) throw new Error("Book not found on webhook");
 
-      if (!safeUserId) {
-        logger.warn("Missing user ID when creating checkout session");
-      }
+      // Stripe shipping address (if using Checkout shipping address collection)
+      // Fallback to metadata when absent.
+      const ship = stripeSession.shipping?.address || {};
+      const shippingAddress = {
+        name: stripeSession.customer_details?.name || user.name || "",
+        address1: ship.line1 || "",
+        address2: ship.line2 || "",
+        city: ship.city || meta.shipping_city || "",
+        state: ship.state || meta.shipping_state || "",
+        postal_code: ship.postal_code || meta.shipping_postal_code || "",
+        country: ship.country || meta.shipping_country || "",
+        email: stripeSession.customer_details?.email || user.email,
+        phone: stripeSession.customer_details?.phone || "",
+      };
 
-      const book = await Book.findById(bookId);
-      if (!book) {
-        throw new Error("Book not found");
-      }
-
-      // Create a print order record with status 'created' (not yet printed)
-      const printOrder = await PrintOrder.create({
-        user_id: safeUserId ? new mongoose.Types.ObjectId(safeUserId) : undefined,
-        book_id: new mongoose.Types.ObjectId(bookId),
-        quantity: qty,
+      const orderData = {
+        user: user._id,
+        book: book._id,
+        quantity: Number(meta.quantity || 1),
+        page_count: Number(meta.page_count || book.page_count || 12),
+        shipping_level: meta.shipping_level || "",
         shipping_address: shippingAddress,
-        shipping_level: shippingLevel,
-        status: "created",
+        currency: (meta.currency || "usd").toLowerCase(),
+        stripe_session_id: stripeSession.id,
+        stripe_payment_intent: stripeSession.payment_intent || null,
+        // Prices (for record)
+        lulu_print_cost: Number(meta.lulu_print_cost || 0),
+        lulu_shipping_cost: Number(meta.lulu_shipping_cost || 0),
+        print_markup_percent: Number(meta.print_markup || 0),
+        shipping_markup_percent: Number(meta.shipping_markup || 0),
+        total_amount: (stripeSession.amount_total != null)
+          ? centsToFloat(stripeSession.amount_total)
+          : null,
+        status: "paid",
+      };
+
+      const created = await this.createPrintOrder(user._id, orderData, stripeSession.id, session);
+
+      await session.commitTransaction();
+      logger.info(`Print order processed successfully. OrderId=${created?._id}`);
+      return created;
+    } catch (err) {
+      await session.abortTransaction();
+      logger.error(`processPrintPaymentSuccess failed: ${err.stack || err.message}`);
+      throw err;
+    } finally {
+      session.endSession();
+    }
+  }
+
+  /**
+   * Create DB PrintOrder, generate print-ready PDFs, submit Lulu print job,
+   * update order with Lulu job ID and artifact URLs.
+   */
+  async createPrintOrder(userId, orderData, stripeSessionId = null, session = null) {
+    const ownsSession = !session;
+    if (ownsSession) {
+      session = await mongoose.startSession();
+      session.startTransaction();
+    }
+
+    try {
+      // 1) Persist initial order
+      const order = await PrintOrder.create(
+        [
+          {
+            user: userId,
+            book: orderData.book,
+            quantity: orderData.quantity,
+            page_count: orderData.page_count,
+            shipping_level: orderData.shipping_level,
+            shipping_address: orderData.shipping_address,
+            currency: orderData.currency,
+            stripe_session_id: stripeSessionId,
+            stripe_payment_intent: orderData.stripe_payment_intent || null,
+            lulu_print_cost: orderData.lulu_print_cost,
+            lulu_shipping_cost: orderData.lulu_shipping_cost,
+            print_markup_percent: orderData.print_markup_percent,
+            shipping_markup_percent: orderData.shipping_markup_percent,
+            total_amount: orderData.total_amount,
+            status: "preparing",
+          },
+        ],
+        { session }
+      ).then((arr) => arr[0]);
+
+      // 2) Generate print-ready PDFs for Lulu (cover + interior)
+      const { coverPdfUrl, interiorPdfUrl } =
+        await this.generatePrintReadyPDFs(order.book, userId, order._id);
+
+      // 3) Submit Lulu print job
+      const luluJob = await luluService.createPrintJob({
+        orderId: String(order._id),
+        quantity: order.quantity,
+        pageCount: order.page_count,
+        currency: order.currency,
+        shippingLevel: order.shipping_level,
+        shippingAddress: order.shipping_address,
+        coverPdfUrl,
+        interiorPdfUrl,
       });
 
-      // Create Stripe checkout session
-      const checkoutSession = await stripeService.createCheckoutSession({
-        printOrderId: printOrder._id.toString(),
+      // 4) Update order with Lulu job details
+      order.cover_pdf_url = coverPdfUrl;
+      order.interior_pdf_url = interiorPdfUrl;
+      order.lulu_print_job_id = luluJob?.id || luluJob?.job_id || null;
+      order.status = luluJob ? "submitted" : "failed_submit";
+      await order.save({ session });
+
+      if (ownsSession) await session.commitTransaction();
+      logger.info(
+        `Lulu print job submitted. order=${order._id} lulu_job=${order.lulu_print_job_id}`
+      );
+      return order;
+    } catch (err) {
+      if (ownsSession) await session.abortTransaction();
+      logger.error(`createPrintOrder failed: ${err.stack || err.message}`);
+      throw err;
+    } finally {
+      if (ownsSession) session.endSession();
+    }
+  }
+
+  /**
+   * Generate print-ready PDFs for Lulu. Returns S3 (or CDN) URLs.
+   */
+  async generatePrintReadyPDFs(bookId, userId, orderId) {
+    try {
+      logger.info(
+        `Generating print-ready PDFs for book=${bookId} user=${userId} order=${orderId}`
+      );
+
+      const result = await printReadyPDFService.generate({
         bookId,
-        quantity: qty,
-        shippingAddress,
-        shippingLevel,
+        userId,
+        orderId,
       });
-
-      logger.info("Print order checkout session created successfully", {
-        sessionId: checkoutSession.id,
-        url: checkoutSession.url,
-      });
-
-      return {
-        checkoutUrl: checkoutSession.url,
-        sessionId: checkoutSession.id,
-      };
-    } catch (error) {
-      logger.error("Failed to create print order checkout session:", error.message);
-      throw new Error(error.message);
-    }
-  }
-
-  /**
-   * Create a print order record (deprecated in favor of checkout)
-   */
-  async createPrintOrder(userId, orderData) {
-    try {
-      const printOrder = await PrintOrder.create({
-        user_id: new mongoose.Types.ObjectId(userId),
-        book_id: new mongoose.Types.ObjectId(orderData.bookId),
-        quantity: orderData.quantity,
-        shipping_address: orderData.shippingAddress,
-        shipping_level: orderData.shippingLevel,
-        status: "created",
-      });
-
-      logger.info("Print order created successfully", {
-        orderId: printOrder._id,
-      });
-
-      return printOrder;
-    } catch (error) {
-      logger.error("Failed to create print order:", error.message);
-      throw new Error(error.message);
-    }
-  }
-
-  /**
-   * Get user's print orders
-   */
-  async getPrintOrders(userId, page = 1, limit = 10) {
-    try {
-      const skip = (page - 1) * limit;
-
-      const orders = await PrintOrder.find({ user_id: userId })
-        .sort({ created_at: -1 })
-        .skip(skip)
-        .limit(limit)
-        .lean();
-
-      const totalOrders = await PrintOrder.countDocuments({ user_id: userId });
-
-      return {
-        orders,
-        pagination: {
-          page,
-          limit,
-          total: totalOrders,
-          pages: Math.ceil(totalOrders / limit),
-        },
-      };
-    } catch (error) {
-      logger.error("Failed to get print orders:", error.message);
-      throw new Error(error.message);
-    }
-  }
-
-  /**
-   * Get print order status from Lulu
-   */
-  async getPrintOrderStatus(orderId) {
-    try {
-      const order = await PrintOrder.findById(orderId);
-      if (!order) {
-        throw new Error("Print order not found");
+      // Expecting: { coverPdfUrl, interiorPdfUrl }
+      if (!result || !result.coverPdfUrl || !result.interiorPdfUrl) {
+        throw new Error("printReadyPDFService returned invalid data");
       }
-
-      // For simplicity: return the status from our DB (extend to query Lulu if needed)
-      return { status: order.status };
-    } catch (error) {
-      logger.error("Failed to get print order status:", error.message);
-      throw new Error(error.message);
+      return result;
+    } catch (err) {
+      logger.error(`generatePrintReadyPDFs failed: ${err.stack || err.message}`);
+      throw err;
     }
   }
 }
