@@ -38,12 +38,12 @@ class PrintOrderService {
       if (!book) throw new Error("Book not found");
 
       // 1) Base costs from Lulu
-      const luluCost = await luluService.calculateCost({
-        pageCount: book.page_count || book.pageCount || 12,
-        quantity,
-        shippingLevel,
-        shippingAddress,
-      });
+const luluCost = await luluService.calculatePrintCost(
+  book.page_count || book.pageCount || 12,
+  quantity,
+  shippingAddress,
+  shippingLevel
+);
       // Expecting: { print_cost: number, shipping_cost: number, currency: 'usd'|'gbp'... }
       if (!luluCost || luluCost.print_cost == null || luluCost.shipping_cost == null) {
         throw new Error("Lulu cost API returned invalid data");
