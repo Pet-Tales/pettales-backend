@@ -12,16 +12,17 @@ const {
 } = require("../utils/constants");
 
 const toCents = (num) => Math.round(Number(num || 0) * 100);
-const centsToFloat = (c) => Math.round(c) / 100;
+const centsToFloat = (c) => Math.round(Number(c) || 0) / 100;
 
 class PrintOrderService {
   /**
    * 🔹 Dynamically calculate Lulu print + shipping cost with markups
+   *     (Uses the exact response shape from the last working backend)
    */
   async calculateOrderCost(bookId, quantity, shippingAddress, shippingLevel) {
     try {
       logger.info(
-        `Calculating Lulu costs for book=${bookId} qty=${quantity} level=${shippingLevel}`
+        `Calculating Lulu costs for book=${bookId}, qty=${quantity}, level=${shippingLevel}`
       );
 
       const book = await Book.findById(bookId);
@@ -35,36 +36,40 @@ class PrintOrderService {
         shippingLevel
       );
 
-      const rawPrint =
-        luluCost.print_cost_incl_tax ??
-        luluCost.print_cost ??
-        luluCost.total_print_cost_incl_tax ??
-        luluCost.line_items?.[0]?.total_cost_incl_tax ??
-        0;
+      // ✅ Use the same keys as the previously working version
+      const rawPrint = parseFloat(
+        luluCost.line_item_costs?.[0]?.total_cost_incl_tax || 0
+      );
+      const rawShip = parseFloat(
+        luluCost.shipping_cost?.total_cost_incl_tax || 0
+      );
+      const rawTotal = parseFloat(luluCost.total_cost_incl_tax || 0);
 
-      const rawShip =
-        luluCost.shipping_cost_incl_tax ??
-        luluCost.shipping_cost ??
-        luluCost.total_shipping_cost_incl_tax ??
-        0;
-
-      if (!rawPrint || rawPrint <= 0)
+      // Validate
+      if (!rawPrint || rawPrint <= 0) {
+        logger.error("❌ Invalid Lulu print cost data", { luluCost });
         throw new Error("Lulu cost API returned invalid data");
+      }
 
       const currency = (luluCost.currency || CURRENCY || "GBP").toLowerCase();
+
+      // --- Apply markups (same logic as before-fix version) ---
+      const printMarkupPct = PRINT_MARKUP_PERCENTAGE || 100;
+      const shipMarkupPct = SHIPPING_MARKUP_PERCENTAGE || 5;
 
       const printCents = toCents(rawPrint);
       const shipCents = toCents(rawShip);
 
       const printWithMarkup = Math.round(
-        printCents * (1 + (PRINT_MARKUP_PERCENTAGE || 0) / 100)
+        printCents * (1 + printMarkupPct / 100)
       );
       const shipWithMarkup = Math.round(
-        shipCents * (1 + (SHIPPING_MARKUP_PERCENTAGE || 0) / 100)
+        shipCents * (1 + shipMarkupPct / 100)
       );
 
       const total_cents = printWithMarkup + shipWithMarkup;
 
+      // --- Return in same shape used by Stripe service ---
       return {
         currency,
         lulu_print_cost_cents: printCents,
