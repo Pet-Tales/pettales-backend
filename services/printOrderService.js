@@ -44,37 +44,50 @@ const luluCost = await luluService.calculatePrintCost(
   shippingAddress,
   shippingLevel
 );
-      // Expecting: { print_cost: number, shipping_cost: number, currency: 'usd'|'gbp'... }
-      if (!luluCost || luluCost.print_cost == null || luluCost.shipping_cost == null) {
-        throw new Error("Lulu cost API returned invalid data");
-      }
 
-      // 2) Apply markups
-      const printMarkupMult = 1 + (PRINT_MARKUP_PERCENTAGE || 0) / 100;
-      const shipMarkupMult = 1 + (SHIPPING_MARKUP_PERCENTAGE || 0) / 100;
+// Normalise Lulu's returned structure
+const printCost =
+  luluCost.line_items?.[0]?.total_cost_incl_tax ??
+  luluCost.total_cost_incl_tax ??
+  0;
+const shippingCost =
+  luluCost.shipping_cost_incl_tax ??
+  luluCost.shipping_cost ??
+  (luluCost.total_shipping_cost_incl_tax ?? 0);
+const currency = (luluCost.currency || CURRENCY || "GBP").toLowerCase();
 
-      const printCostCents = toCents(luluCost.print_cost);
-      const shipCostCents = toCents(luluCost.shipping_cost);
+// Validate values
+if (!printCost || printCost <= 0) {
+  throw new Error("Lulu cost API returned invalid data");
+}
 
-      const printWithMarkupCents = Math.round(printCostCents * printMarkupMult);
-      const shipWithMarkupCents = Math.round(shipCostCents * shipMarkupMult);
+// 2) Apply markups
+const printMarkupMult = 1 + (PRINT_MARKUP_PERCENTAGE || 0) / 100;
+const shipMarkupMult = 1 + (SHIPPING_MARKUP_PERCENTAGE || 0) / 100;
 
-      const total_cents = printWithMarkupCents + shipWithMarkupCents;
+const printCostCents = toCents(printCost);
+const shipCostCents = toCents(shippingCost);
 
-      return {
-        currency: (luluCost.currency || CURRENCY || "usd").toLowerCase(),
-        quantity,
-        lulu_print_cost_cents: printCostCents,
-        lulu_shipping_cost_cents: shipCostCents,
-        print_markup_percent: PRINT_MARKUP_PERCENTAGE || 0,
-        shipping_markup_percent: SHIPPING_MARKUP_PERCENTAGE || 0,
-        total_cost_cents: total_cents,
+const printWithMarkupCents = Math.round(printCostCents * printMarkupMult);
+const shipWithMarkupCents = Math.round(shipCostCents * shipMarkupMult);
 
-        // helpful floats for UI/logs
-        lulu_print_cost: centsToFloat(printCostCents),
-        lulu_shipping_cost: centsToFloat(shipCostCents),
-        total_cost: centsToFloat(total_cents),
-      };
+const total_cents = printWithMarkupCents + shipWithMarkupCents;
+
+return {
+  currency,
+  quantity,
+  lulu_print_cost_cents: printCostCents,
+  lulu_shipping_cost_cents: shipCostCents,
+  print_markup_percent: PRINT_MARKUP_PERCENTAGE || 0,
+  shipping_markup_percent: SHIPPING_MARKUP_PERCENTAGE || 0,
+  total_cost_cents: total_cents,
+
+  // helpful floats for UI/logs
+  lulu_print_cost: centsToFloat(printCostCents),
+  lulu_shipping_cost: centsToFloat(shipCostCents),
+  total_cost: centsToFloat(total_cents),
+};
+
     } catch (err) {
       logger.error(`calculateOrderCost failed: ${err.stack || err.message}`);
       throw err;
