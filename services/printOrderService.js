@@ -5,8 +5,53 @@ const { Book } = require("../models");
 
 class PrintOrderService {
   /**
-   * Creates a print order at Lulu.
-   * @param {Object} data - Payload containing book and address info
+   * Calculate Lulu print cost
+   */
+  async calculateOrderCost(bookId, quantity, shippingAddress, shippingLevel = "MAIL") {
+    try {
+      if (!bookId) throw new Error("Missing bookId");
+
+      const bookDoc = await Book.findById(bookId).select("interior_pdf_url cover_pdf_url").lean();
+      if (!bookDoc) throw new Error("Book not found");
+      if (!bookDoc.interior_pdf_url || !bookDoc.cover_pdf_url)
+        throw new Error("Missing PDFs for cost calc");
+
+      const payload = {
+        line_items: [
+          {
+            pod_package_id: "0600X0900BWSTDPB060UW444GXX",
+            quantity: quantity || 1,
+            cover_pdf_url: bookDoc.cover_pdf_url,
+            interior_pdf_url: bookDoc.interior_pdf_url,
+          },
+        ],
+        shipping_address: shippingAddress,
+        shipping_level: shippingLevel,
+      };
+
+      logger.info("💰 Calculating Lulu print cost", { payload });
+
+      const response = await axios.post(`${LULU_API_URL}/print-job-costs/`, payload, {
+        headers: {
+          Authorization: `Bearer ${LULU_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+      });
+
+      const cost = response.data;
+      if (!cost || !cost.total_cost) throw new Error("Invalid cost response from Lulu");
+      logger.info("✅ Lulu print cost calculated", { total_cost: cost.total_cost });
+      return cost;
+    } catch (err) {
+      logger.error("❌ Failed to calculate Lulu cost", {
+        error: err?.response?.data?.detail || err.message,
+      });
+      throw err;
+    }
+  }
+
+  /**
+   * Create Lulu print order
    */
   async createPrintOrder(data) {
     try {
@@ -20,17 +65,13 @@ class PrintOrderService {
         }
       }
 
-      // Validate required Lulu fields
       if (!data.cover_pdf_url || !data.interior_pdf_url) {
         throw new Error("Missing PDFs for print order");
       }
-      if (!data.shipping_address?.country_code) {
-        throw new Error("Missing country_code in shipping address");
-      }
 
       const payload = {
-        contact_email: data.shipping_address.email,
-        contact_phone: data.shipping_address.phone_number,
+        contact_email: data.shipping_address?.email,
+        contact_phone: data.shipping_address?.phone_number,
         shipping_address: data.shipping_address,
         line_items: [
           {
@@ -57,7 +98,7 @@ class PrintOrderService {
       logger.info("✅ Lulu print job created", { luluJobId: response.data.id });
       return response.data;
     } catch (err) {
-      logger.error("❌ Failed to create Lulu print job", { error: err.message, stack: err.stack });
+      logger.error("❌ Failed to create Lulu print job", { error: err.message });
       throw err;
     }
   }
