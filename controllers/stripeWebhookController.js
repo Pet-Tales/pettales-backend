@@ -27,4 +27,23 @@ const handleStripeWebhook = async (req, res) => {
 
       // Expand to include full details we’ll need for Lulu
       const fullSession = await stripe.checkout.sessions.retrieve(session.id, {
-        expand: ["customer]()
+        expand: ["customer_details", "shipping_details", "payment_intent"],
+      });
+
+      // 🔹 Create Lulu order
+      await createFromCheckout(fullSession);
+      logger.info(`✅ Lulu print order triggered for session ${session.id}`);
+    } else if (event.type === "payment_intent.succeeded") {
+      logger.info(`💰 Payment succeeded: ${event.data.object.id}`);
+    } else {
+      logger.info(`ℹ️ Unhandled Stripe event type: ${event.type}`);
+    }
+
+    return res.status(200).send("OK");
+  } catch (err) {
+    logger.error(`❌ Stripe webhook error: ${err.message}`);
+    return res.status(400).send(`Webhook Error: ${err.message}`);
+  }
+};
+
+module.exports = { handleStripeWebhook };
