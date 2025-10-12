@@ -1,4 +1,3 @@
-// services/printOrderService.js
 const mongoose = require("mongoose");
 const { PrintOrder, Book, User } = require("../models");
 const luluService = require("./luluService");
@@ -8,80 +7,73 @@ const logger = require("../utils/logger");
 const {
   PRINT_MARKUP_PERCENTAGE,
   SHIPPING_MARKUP_PERCENTAGE,
-  CURRENCY, // e.g. "usd" or "gbp"
 } = require("../utils/constants");
-
-const toCents = (num) => Math.round(Number(num || 0) * 100);
-const centsToFloat = (c) => Math.round(Number(c) || 0) / 100;
 
 class PrintOrderService {
   /**
-   * 🔹 Dynamically calculate Lulu print + shipping cost with markups
-   *     (Uses the exact response shape from the last working backend)
+   * Calculate order cost including markup
    */
   async calculateOrderCost(bookId, quantity, shippingAddress, shippingLevel) {
     try {
       logger.info(
-        `Calculating Lulu costs for book=${bookId}, qty=${quantity}, level=${shippingLevel}`
+        `Calculating order cost for book ${bookId}, quantity: ${quantity}`
       );
 
+      // Get book details
       const book = await Book.findById(bookId);
-      if (!book) throw new Error("Book not found");
+      if (!book) {
+        throw new Error("Book not found");
+      }
 
-      // --- Call Lulu for live cost ---
-      const luluCost = await luluService.calculatePrintCost(
-        book.page_count || book.pageCount || 12,
+      // Get Lulu print cost
+      const luluCostData = await luluService.calculatePrintCost(
+        book.page_count,
         quantity,
         shippingAddress,
         shippingLevel
       );
 
-      // ✅ Use the same keys as the previously working version
-      const rawPrint = parseFloat(
-        luluCost.line_item_costs?.[0]?.total_cost_incl_tax || 0
+      // Calculate costs with markup
+      const luluPrintCost = parseFloat(
+        luluCostData.line_item_costs?.[0]?.total_cost_incl_tax || 0
       );
-      const rawShip = parseFloat(
-        luluCost.shipping_cost?.total_cost_incl_tax || 0
+      const luluShippingCost = parseFloat(
+        luluCostData.shipping_cost?.total_cost_incl_tax || 0
       );
-      const rawTotal = parseFloat(luluCost.total_cost_incl_tax || 0);
+      const luluTotalCost = parseFloat(luluCostData.total_cost_incl_tax);
 
-      // Validate
-      if (!rawPrint || rawPrint <= 0) {
-        logger.error("❌ Invalid Lulu print cost data", { luluCost });
-        throw new Error("Lulu cost API returned invalid data");
-      }
+      // Apply markups
+      const printMarkupPercentage = PRINT_MARKUP_PERCENTAGE || 100;
+      const shippingMarkupPercentage = SHIPPING_MARKUP_PERCENTAGE || 5;
 
-      const currency = (luluCost.currency || CURRENCY || "GBP").toLowerCase();
+      const printCostWithMarkup =
+        luluPrintCost * (1 + printMarkupPercentage / 100);
+      const shippingCostWithMarkup =
+        luluShippingCost * (1 + shippingMarkupPercentage / 100);
+      const totalCostGBP = printCostWithMarkup + shippingCostWithMarkup;
+      const totalCostCents = Math.ceil(totalCostGBP * 100);
 
-      // --- Apply markups (same logic as before-fix version) ---
-      const printMarkupPct = PRINT_MARKUP_PERCENTAGE || 100;
-      const shipMarkupPct = SHIPPING_MARKUP_PERCENTAGE || 5;
-
-      const printCents = toCents(rawPrint);
-      const shipCents = toCents(rawShip);
-
-      const printWithMarkup = Math.round(
-        printCents * (1 + printMarkupPct / 100)
-      );
-      const shipWithMarkup = Math.round(
-        shipCents * (1 + shipMarkupPct / 100)
-      );
-
-      const total_cents = printWithMarkup + shipWithMarkup;
-
-      // --- Return in same shape used by Stripe service ---
-      return {
-        currency,
-        lulu_print_cost_cents: printCents,
-        lulu_shipping_cost_cents: shipCents,
-        total_cost_cents: total_cents,
-        lulu_print_cost: centsToFloat(printCents),
-        lulu_shipping_cost: centsToFloat(shipCents),
-        total_cost: centsToFloat(total_cents),
+      const costBreakdown = {
+        book_id: bookId,
+        book_title: book.title,
+        quantity,
+        page_count: book.page_count,
+        currency: "GBP",
+        lulu_print_cost_gbp: luluPrintCost,
+        lulu_shipping_cost_gbp: luluShippingCost,
+        lulu_total_cost_gbp: luluTotalCost,
+        print_markup_percentage: printMarkupPercentage,
+        shipping_markup_percentage: shippingMarkupPercentage,
+        display_print_cost_gbp: printCostWithMarkup.toFixed(2),
+        display_shipping_cost_gbp: shippingCostWithMarkup.toFixed(2),
+        display_total_cost_gbp: totalCostGBP.toFixed(2),
+        total_cost_cents: totalCostCents,
       };
-    } catch (err) {
-      logger.error(`calculateOrderCost failed: ${err.stack || err.message}`);
-      throw err;
+
+      return costBreakdown;
+    } catch (error) {
+      logger.error("Failed to calculate order cost:", error);
+      throw new Error("Error calculating order cost");
     }
   }
 }
