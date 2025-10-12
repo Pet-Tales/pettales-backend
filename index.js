@@ -26,8 +26,14 @@ checkOptionalEnvVars();
 // Initialize app
 const app = express();
 
-// Middleware
-app.use("/api/webhook/stripe", express.raw({ type: "application/json" })); // 🔹 Add this line
+// ✅ Stripe webhook must be defined before body parsers, but as a *route*, not middleware
+app.post(
+  "/api/webhook/stripe",
+  express.raw({ type: "application/json" }),
+  handleStripeWebhook
+);
+
+// Standard middleware (order matters)
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
@@ -41,13 +47,12 @@ connectDB();
 // Routes
 app.use("/api", routes);
 
-
 // Health endpoint
 app.get("/health", (req, res) => {
   res.status(200).json({ status: "ok", timestamp: new Date().toISOString() });
 });
 
-// Error handler
+// Global error handler
 app.use((err, req, res, next) => {
   logger.error("Unhandled error", err);
   res.status(500).json({ error: err.message });
