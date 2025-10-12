@@ -33,11 +33,11 @@ app.post(
   handleStripeWebhook
 );
 
-// Standard middleware (order matters)
+// ✅ Correct middleware order (important for authentication)
+app.use(cors({ origin: WEB_URL, credentials: true }));
+app.use(cookieParser());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use(cookieParser());
-app.use(cors({ origin: WEB_URL, credentials: true }));
 app.use(passport.initialize());
 if (DEBUG_MODE) app.use(morgan("dev"));
 
