@@ -41,6 +41,9 @@ app.use(express.urlencoded({ extended: true }));
 app.use(passport.initialize());
 if (DEBUG_MODE) app.use(morgan("dev"));
 
+// ✅ Restore user authentication middleware (was missing)
+app.use(authenticateUser);
+
 // Connect database
 connectDB();
 
