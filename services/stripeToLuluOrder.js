@@ -22,33 +22,35 @@ async function createFromCheckout(session) {
   const cd = session.customer_details || {};
   const sd = session.shipping_details || {};
   const addr = mapAddress(cd, sd);
-
   const meta = session.metadata || {};
-  const amountTotalCents = Number(session.amount_total || 0);
 
-  // Prefer explicit USD cost if provided in metadata
+  const amountTotalCents = Number(session.amount_total || 0);
   const luluCostUsd =
     meta.lulu_total_usd != null
       ? Number(meta.lulu_total_usd)
       : Number((amountTotalCents / 100).toFixed(2));
 
-  // Your model expects credits = USD cents
-  const totalCostCredits = Math.round(luluCostUsd * 100);
-
+  // 🔹 Build the correct structure for printOrderService
   const orderData = {
     user_id: meta.user_id || null,
     book_id: meta.book_id || null,
-
-    shipping_address: addr,
-    lulu_cost_usd: luluCostUsd,
-    total_cost_credits: totalCostCredits,
-
     page_count: meta.page_count ? Number(meta.page_count) : undefined,
+    quantity: 1,
     shipping_level: meta.shipping_level || undefined,
-    breakdown: {
-      lulu_print_cost: meta.lulu_print_cost ? Number(meta.lulu_print_cost) : undefined,
-      lulu_shipping_cost: meta.lulu_shipping_cost ? Number(meta.lulu_shipping_cost) : undefined,
-      markup_percent: meta.markup_percent ? Number(meta.markup_percent) : undefined,
+    shipping_address: addr,
+    currency: session.currency?.toUpperCase() || "GBP",
+    lulu_cost_usd: luluCostUsd,
+    total_cost_usd: luluCostUsd, // unified cost field
+    cost_breakdown: {
+      lulu_print_cost: meta.lulu_print_cost
+        ? Number(meta.lulu_print_cost)
+        : undefined,
+      lulu_shipping_cost: meta.lulu_shipping_cost
+        ? Number(meta.lulu_shipping_cost)
+        : undefined,
+      markup_percent: meta.markup_percent
+        ? Number(meta.markup_percent)
+        : undefined,
       stripe_session_id: session.id,
       stripe_payment_intent:
         typeof session.payment_intent === "string"
@@ -57,15 +59,15 @@ async function createFromCheckout(session) {
     },
   };
 
-  logger.info("🧾 Building Lulu PrintOrder from Stripe session", {
-    sessionId: session.id,
+  logger.info("🧾 Stripe→Lulu order data built", {
     bookId: orderData.book_id,
     userId: orderData.user_id,
-    luluCostUsd: orderData.lulu_cost_usd,
-    totalCostCredits: orderData.total_cost_credits,
+    totalCost: orderData.total_cost_usd,
   });
 
   await printOrderService.createPrintOrder(orderData);
+
+  logger.info("✅ Stripe checkout → Lulu print order created successfully");
 }
 
 module.exports = { createFromCheckout };
