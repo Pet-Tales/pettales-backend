@@ -339,6 +339,11 @@ class LuluService {
     try {
       logger.info(`Creating print job for order ${printOrderData.external_id}`);
 
+      // Validate shipping address before API call
+      if (!printOrderData.shipping_address.street1 || !printOrderData.shipping_address.postcode) {
+        throw new Error(`Invalid shipping address: missing street1 or postcode`);
+      }
+
       const requestData = {
         external_id: printOrderData.external_id,
         line_items: [
@@ -361,6 +366,11 @@ class LuluService {
         shipping_level: printOrderData.shipping_level,
         contact_email: printOrderData.shipping_address.email,
       };
+
+      logger.info(`Lulu print job request payload`, {
+        externalId: printOrderData.external_id,
+        requestData: JSON.stringify(requestData, null, 2)
+      });
 
       const result = await this.makeRequest(
         "POST",
