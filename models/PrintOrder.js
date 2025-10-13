@@ -23,36 +23,6 @@ const printOrderSchema = new mongoose.Schema(
       required: true,
       // This will be our internal order ID (e.g., "PTO_" + timestamp + random)
     },
-    // Stripe tracking fields
-    stripe_session_id: {
-      type: String,
-      unique: true,
-      sparse: true,
-      index: true
-    },
-    stripe_payment_intent_id: {
-      type: String,
-      index: true
-    },
-
-    // Lulu submission tracking
-    lulu_submission_status: {
-      type: String,
-      enum: ['pending', 'submitting', 'submitted', 'failed', 'retry_needed'],
-      default: 'pending'
-    },
-    lulu_submission_attempts: {
-      type: Number,
-      default: 0
-    },
-    lulu_submission_error: {
-      type: String,
-      default: null
-    },
-    lulu_submitted_at: {
-      type: Date,
-      default: null
-    },
 
     // Order Details
     quantity: {
@@ -61,16 +31,16 @@ const printOrderSchema = new mongoose.Schema(
       min: 1,
       max: 100, // Reasonable limit for print orders
     },
-        total_cost_cents: {
+    total_cost_credits: {
       type: Number,
       required: true,
-      min: 0
+      min: 0,
     },
-    lulu_cost_gbp: {
-  type: Number,
-  required: true,
-  min: 0
-},
+    lulu_cost_usd: {
+      type: Number,
+      required: true,
+      min: 0,
+    },
     markup_percentage: {
       type: Number,
       default: 20,
@@ -217,8 +187,6 @@ const printOrderSchema = new mongoose.Schema(
 printOrderSchema.index({ user_id: 1, created_at: -1 });
 printOrderSchema.index({ status: 1 });
 printOrderSchema.index({ book_id: 1 });
-printOrderSchema.index({ stripe_session_id: 1 });
-printOrderSchema.index({ lulu_submission_status: 1, lulu_submission_attempts: 1 });
 // Note: lulu_print_job_id and external_id indexes are created automatically by unique: true
 
 // Pre-save middleware to generate external_id if not provided
@@ -234,6 +202,11 @@ printOrderSchema.pre("save", function (next) {
 // Virtual for formatted order ID
 printOrderSchema.virtual("formatted_order_id").get(function () {
   return this.external_id;
+});
+
+// Virtual for total cost in USD
+printOrderSchema.virtual("total_cost_usd").get(function () {
+  return this.total_cost_credits * 0.01; // Convert credits to USD
 });
 
 // Virtual for order age in days
