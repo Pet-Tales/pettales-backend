@@ -2,7 +2,6 @@ const crypto = require("crypto");
 const { validationResult } = require("express-validator");
 const logger = require("../utils/logger");
 const { emailService } = require("../services");
-// credit system removed
 const { Book } = require("../models");
 const { WEBHOOK_SECRET } = require("../utils/constants");
 
@@ -105,26 +104,9 @@ const handleBookGeneration = async (req, res) => {
       });
     }
 
-    // Credit system removed — skip refund for failed generations
-if (status !== 200) {
-  logger.info(`Skipping credit refund for book ${bookId} (credit system removed)`);
-}
-
-          logger.info(
-            `Refunded ${refundAmount} credits for failed book generation: ${bookId}`
-          );
-        } else {
-          logger.info(
-            `No usage transaction found for book ${bookId}, skipping refund`
-          );
-        }
-      } catch (refundError) {
-        logger.error(
-          `Failed to refund credits for book ${bookId}:`,
-          refundError
-        );
-        // Don't fail the webhook if credit refund fails
-      }
+    // Log webhook processing (credit system removed, no refunds needed)
+    if (status !== 200) {
+      logger.info(`Book generation failed for ${bookId}, status: ${status}`);
     }
 
     // Send appropriate email notification
