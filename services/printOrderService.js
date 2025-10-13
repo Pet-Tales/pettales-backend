@@ -324,6 +324,69 @@ class PrintOrderService {
       session.endSession();
     }
   }
+
+  /**
+   * Process successful print payment from Stripe webhook
+   */
+  async processPrintPaymentSuccess(stripeSession) {
+    try {
+      const { metadata } = stripeSession;
+
+      if (metadata.order_type !== "print" && metadata.type !== "book_print") {
+        return;
+      }
+
+      // Check if print order already exists for this session
+      const existingOrder = await PrintOrder.findOne({
+        stripe_session_id: stripeSession.id,
+      });
+
+      if (existingOrder) {
+        logger.info(`Print order already exists for session ${stripeSession.id}`);
+        return existingOrder;
+      }
+
+      // Reconstruct order data from metadata
+      const orderData = {
+        bookId: metadata.book_id,
+        quantity: parseInt(metadata.quantity),
+        shippingAddress: {
+          country_code: metadata.shipping_country,
+          city: metadata.shipping_city,
+          state_code: metadata.shipping_state,
+          postal_code: metadata.shipping_postal_code,
+          // Note: Full address details should be collected from Stripe checkout
+          name: stripeSession.shipping_details?.name || stripeSession.customer_details?.name,
+          line1: stripeSession.shipping_details?.address?.line1,
+          line2: stripeSession.shipping_details?.address?.line2,
+        },
+        shippingLevel: metadata.shipping_level,
+        costData: {
+          total_cost_cents: stripeSession.amount_total,
+          lulu_cost_gbp: parseFloat(metadata.lulu_print_cost) + parseFloat(metadata.lulu_shipping_cost),
+          print_markup_percentage: parseInt(metadata.print_markup),
+        },
+      };
+
+      // Create the print order
+      const result = await this.createPrintOrder(
+        metadata.user_id,
+        orderData,
+        stripeSession.id
+      );
+
+      logger.info("Print order created from Stripe webhook", {
+        printOrderId: result.printOrder._id,
+        stripeSessionId: stripeSession.id,
+      });
+
+      return result.printOrder;
+    } catch (error) {
+      logger.error("Failed to process print payment:", error.message);
+      throw error;
+    }
+  }
+
   /**
    * Generate print-ready PDFs for a book
    */
@@ -587,60 +650,21 @@ async processPrintPaymentSuccess(stripeSession) {
     const random = Math.random().toString(36).substring(2, 8).toUpperCase();
     const externalId = `PTO_${timestamp}_${random}`;
 
-    // Reconstruct shipping address from Stripe data (fallback to customer_details.address when shipping_details is null)
-const stripeShipping  = stripeSession.shipping_details || stripeSession.shipping;
-const customerDetails = stripeSession.customer_details;
-const billingAddr     = customerDetails?.address || null;
-
-const shippingAddress = {
-  name: (
-    stripeShipping?.name ||
-    customerDetails?.name ||
-    "Customer"
-  ),
-  street1: (
-    stripeShipping?.address?.line1 ||
-    billingAddr?.line1 ||
-    metadata.shipping_line1 ||
-    metadata.shipping_address_line1 ||
-    ""
-  ),
-  street2: (
-    stripeShipping?.address?.line2 ||
-    billingAddr?.line2 ||
-    metadata.shipping_line2 ||
-    metadata.shipping_address_line2 ||
-    ""
-  ),
-  city: (
-    stripeShipping?.address?.city ||
-    billingAddr?.city ||
-    metadata.shipping_city ||
-    ""
-  ),
-  state_code: (
-    stripeShipping?.address?.state ||
-    billingAddr?.state ||
-    metadata.shipping_state ||
-    ""
-  ),
-  postcode: (
-    stripeShipping?.address?.postal_code ||
-    billingAddr?.postal_code ||
-    metadata.shipping_postal_code ||
-    metadata.postcode ||
-    ""
-  ),
-  country_code: (
-    stripeShipping?.address?.country ||
-    billingAddr?.country ||
-    metadata.shipping_country ||
-    "US"
-  ),
-  phone_number: customerDetails?.phone || "N/A",
-  email: customerDetails?.email || metadata.customer_email || ""
-};
-
+    // Reconstruct shipping address from Stripe data
+    const stripeShipping = stripeSession.shipping_details || stripeSession.shipping;
+    const customerDetails = stripeSession.customer_details;
+    
+    const shippingAddress = {
+      name: stripeShipping?.name || customerDetails?.name || "Customer",
+      street1: stripeShipping?.address?.line1 || "",
+      street2: stripeShipping?.address?.line2 || "",
+      city: stripeShipping?.address?.city || metadata.shipping_city || "",
+      state_code: stripeShipping?.address?.state || metadata.shipping_state || "",
+      postcode: stripeShipping?.address?.postal_code || metadata.shipping_postal_code || "",
+      country_code: stripeShipping?.address?.country || metadata.shipping_country || "US",
+      phone_number: customerDetails?.phone || "N/A",
+      email: customerDetails?.email || metadata.customer_email || ""
+    };
 
     // Create print order record
     const printOrder = new PrintOrder({
