@@ -86,65 +86,66 @@ class StripeService {
    * @returns {Promise<Object>} - Stripe checkout session
    */
   async createPrintCheckoutSession(bookId, totalCents, userId, userEmail, metadata = {}) {
-  const safeBookId    = bookId != null ? String(bookId) : "";
-  const safeUserId    = userId != null ? String(userId) : `guest_${Date.now()}`;
-  const safeEmail     = (userEmail && String(userEmail).trim()) || undefined;
-  const safeAmount    = Number.isFinite(Number(totalCents)) ? Number(totalCents) : 0;
+    try { // <-- added
+      const safeBookId    = bookId != null ? String(bookId) : "";
+      const safeUserId    = userId != null ? String(userId) : `guest_${Date.now()}`;
+      const safeEmail     = (userEmail && String(userEmail).trim()) || undefined;
+      const safeAmount    = Number.isFinite(Number(totalCents)) ? Number(totalCents) : 0;
 
-  const pageCountRaw  = metadata.page_count ?? metadata.pageCount ?? 12;
-  const safePageCount = Number.isFinite(Number(pageCountRaw)) ? Number(pageCountRaw) : 12;
+      const pageCountRaw  = metadata.page_count ?? metadata.pageCount ?? 12;
+      const safePageCount = Number.isFinite(Number(pageCountRaw)) ? Number(pageCountRaw) : 12;
 
-  const baseMeta = {
-    type: "book_print",
-    order_type: "print",
-    book_id: safeBookId,
-    user_id: safeUserId,
-    page_count: String(safePageCount),
-    lulu_print_cost: String(metadata.lulu_print_cost ?? ""),
-    lulu_shipping_cost: String(metadata.lulu_shipping_cost ?? ""),
-    print_markup: String(metadata.print_markup ?? ""),
-    shipping_markup: String(metadata.shipping_markup ?? ""),
-  };
-  const extraMeta = Object.fromEntries(
-    Object.entries(metadata || {}).map(([k, v]) => [k, String(v ?? "")])
-  );
+      const baseMeta = {
+        type: "book_print",
+        order_type: "print",
+        book_id: safeBookId,
+        user_id: safeUserId,
+        page_count: String(safePageCount),
+        lulu_print_cost: String(metadata.lulu_print_cost ?? ""),
+        lulu_shipping_cost: String(metadata.lulu_shipping_cost ?? ""),
+        print_markup: String(metadata.print_markup ?? ""),
+        shipping_markup: String(metadata.shipping_markup ?? ""),
+      };
+      const extraMeta = Object.fromEntries(
+        Object.entries(metadata || {}).map(([k, v]) => [k, String(v ?? "")])
+      );
 
-  const returnUrl = metadata.returnUrl || `/books/${safeBookId}`;
+      const returnUrl = metadata.returnUrl || `/books/${safeBookId}`;
 
-  const session = await stripeClient.checkout.sessions.create({
-    mode: "payment",
-    payment_method_types: ["card"],
-    line_items: [{
-      price_data: {
-        currency: "gbp",
-        product_data: {
-          name: `Print & Ship - ${safePageCount} Page Book`,
-          description: `Professional printed book shipped to ${metadata.shipping_country || "your address"}. Includes digital download.`,
+      const session = await stripeClient.checkout.sessions.create({
+        mode: "payment",
+        payment_method_types: ["card"],
+        line_items: [{
+          price_data: {
+            currency: "gbp",
+            product_data: {
+              name: `Print & Ship - ${safePageCount} Page Book`,
+              description: `Professional printed book shipped to ${metadata.shipping_country || "your address"}. Includes digital download.`,
+            },
+            unit_amount: safeAmount,
+          },
+          quantity: 1,
+        }],
+        success_url: `${WEB_URL}${returnUrl}?session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${WEB_URL}${returnUrl}?payment=cancelled`,
+
+        // ✅ keep this so Stripe can collect a shipping address (even if event sometimes lacks shipping_details)
+        shipping_address_collection: {
+          allowed_countries: ["US","CA","GB","IE","AU","NZ","FR","DE","ES","IT","NL","BE","SE","NO","DK"]
         },
-        unit_amount: safeAmount,
-      },
-      quantity: 1,
-    }],
-    success_url: `${WEB_URL}${returnUrl}?session_id={CHECKOUT_SESSION_ID}`,
-    cancel_url: `${WEB_URL}${returnUrl}?payment=cancelled`,
+        phone_number_collection: { enabled: true },
 
-    // ✅ keep this so Stripe can collect a shipping address (even if event sometimes lacks shipping_details)
-    shipping_address_collection: {
-      allowed_countries: ["US","CA","GB","IE","AU","NZ","FR","DE","ES","IT","NL","BE","SE","NO","DK"]
-    },
-    phone_number_collection: { enabled: true },
+        ...(safeEmail && { customer_email: safeEmail }),
+        metadata: { ...baseMeta, ...extraMeta },
+        payment_intent_data: { metadata: { type: "book_print", book_id: safeBookId, user_id: safeUserId } },
+      });
 
-    ...(safeEmail && { customer_email: safeEmail }),
-    metadata: { ...baseMeta, ...extraMeta },
-    payment_intent_data: { metadata: { type: "book_print", book_id: safeBookId, user_id: safeUserId } },
-  });
-
-  return session;
-  } catch (error) {
-    logger.error(`Failed to create print checkout session: ${error.message}`);
-    throw error;
+      return session;
+    } catch (error) {
+      logger.error(`Failed to create print checkout session: ${error.message}`);
+      throw error;
+    }
   }
-}
 
   /**
    * Create a generic checkout session (for backwards compatibility and special cases)
