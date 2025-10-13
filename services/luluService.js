@@ -10,7 +10,7 @@ class LuluService {
   }
 
   async makeRequest(method, endpoint, data = null) {
-    const url = `${this.baseUrl}${endpoint}`;
+    const url = new URL(endpoint, this.baseUrl).toString(); // ✅ fixes "Invalid URL"
     const headers = {
       Authorization: `Bearer ${this.apiKey}`,
       "Content-Type": "application/json",
@@ -25,9 +25,6 @@ class LuluService {
     }
   }
 
-  /**
-   * Calculate print job cost
-   */
   async calculatePrintCost(pageCount, quantity, shippingAddress, shippingLevel) {
     try {
       logger.info(`Calculating print cost for ${quantity} books with ${pageCount} pages`);
@@ -70,17 +67,13 @@ class LuluService {
         currency: result.currency,
       });
 
-      // ⬅ returns full Lulu JSON (unchanged) so printOrderService reads correct keys
-      return result;
+      return result; // returns full Lulu JSON (unchanged)
     } catch (error) {
       logger.error("Failed to calculate print cost:", error);
       throw new Error(error);
     }
   }
 
-  /**
-   * Create a print job (used after Stripe webhook)
-   */
   async createPrintJob(printOrderData) {
     try {
       logger.info(`Creating print job for order ${printOrderData.external_id}`);
