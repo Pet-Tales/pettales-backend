@@ -61,6 +61,11 @@ const printOrderSchema = new mongoose.Schema(
       min: 1,
       max: 100, // Reasonable limit for print orders
     },
+        total_cost_cents: {
+      type: Number,
+      required: true,
+      min: 0
+    },
     total_cost_credits: {
       type: Number,
       required: true,
