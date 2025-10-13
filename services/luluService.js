@@ -1,126 +1,122 @@
-const axios = require("axios");
+const mongoose = require("mongoose");
+const { PrintOrder, Book, User } = require("../models");
+const luluService = require("./luluService");
+const stripeService = require("./stripeService");
+const printReadyPDFService = require("./printReadyPDFService");
 const logger = require("../utils/logger");
-const { LULU_API_KEY, LULU_BASE_URL, LULU_POD_PACKAGE_ID } = require("../utils/constants");
+const {
+  PRINT_MARKUP_PERCENTAGE,
+  SHIPPING_MARKUP_PERCENTAGE,
+} = require("../utils/constants");
 
-class LuluService {
-  constructor() {
-    this.apiKey = LULU_API_KEY;
-    this.baseUrl = LULU_BASE_URL;
-    this.podPackageId = LULU_POD_PACKAGE_ID;
-  }
-
-  /**
-   * Generic Lulu API request
-   */
-  async makeRequest(method, endpoint, data = null) {
-    const url = `${this.baseUrl}${endpoint}`; // ✅ reverted to simple concatenation
-    const headers = {
-      Authorization: `Bearer ${this.apiKey}`,
-      "Content-Type": "application/json",
-    };
-
+class PrintOrderService {
+  async calculateOrderCost(bookId, quantity, shippingAddress, shippingLevel) {
     try {
-      const response = await axios({ method, url, headers, data });
-      return response.data;
-    } catch (error) {
-      logger.error("Lulu API request failed:", error.response?.data || error.message);
-      throw new Error(error.response?.data?.message || error.message);
-    }
-  }
-
-  /**
-   * Calculate print cost (used by printOrderService)
-   */
-  async calculatePrintCost(pageCount, quantity, shippingAddress, shippingLevel) {
-    try {
-      logger.info(`Calculating print cost for ${quantity} books with ${pageCount} pages`);
-
-      if (!pageCount || pageCount < 1) throw new Error(`Invalid page count: ${pageCount}`);
-      if (!quantity || quantity < 1) throw new Error(`Invalid quantity: ${quantity}`);
-      if (!this.podPackageId) throw new Error("POD package ID not configured");
-      if (!shippingAddress) throw new Error("Shipping address is required");
-
-      const requestData = {
-        line_items: [
-          {
-            page_count: pageCount,
-            pod_package_id: this.podPackageId,
-            quantity: quantity,
-          },
-        ],
-        shipping_address: {
-          name: shippingAddress.name,
-          street1: shippingAddress.street1,
-          street2: shippingAddress.street2 || "",
-          city: shippingAddress.city,
-          state_code: shippingAddress.state_code || "",
-          postcode: shippingAddress.postcode,
-          country_code: shippingAddress.country_code,
-          phone_number: shippingAddress.phone_number,
-          email: shippingAddress.email,
-        },
-        shipping_option: shippingLevel,
-      };
-
-      const result = await this.makeRequest(
-        "POST",
-        "print-job-cost-calculations/", // ✅ no leading slash
-        requestData
+      logger.info(
+        `Calculating order cost for book ${bookId}, quantity: ${quantity}`
       );
 
-      logger.info("Print cost calculation successful", {
-        totalCostGBP: result.total_cost_incl_tax,
-        currency: result.currency,
-      });
+      const book = await Book.findById(bookId);
+      if (!book) throw new Error("Book not found");
 
-      // ✅ returns full Lulu JSON unchanged (used by printOrderService)
-      return result;
+      const pageCount = book.pageCount || 24;
+
+      const shippingOptions = await luluService.getShippingOptions(
+        shippingAddress,
+        pageCount,
+        quantity
+      );
+
+      const selectedOption = shippingOptions.find(
+        (opt) => opt.level === shippingLevel
+      );
+      if (!selectedOption) throw new Error("Invalid shipping level");
+
+      const luluCostData = await luluService.calculatePrintCost(
+        shippingAddress,
+        pageCount,
+        quantity,
+        shippingLevel
+      );
+
+      const printCost = Number(
+        luluCostData.line_item_costs?.[0]?.total_cost_incl_tax || 0
+      );
+      const shippingCost = Number(
+        luluCostData.shipping_cost?.total_cost_incl_tax || 0
+      );
+      const baseTotal = printCost + shippingCost;
+
+      const totalWithMarkup =
+        baseTotal *
+        (1 + PRINT_MARKUP_PERCENTAGE / 100 + SHIPPING_MARKUP_PERCENTAGE / 100);
+
+      return {
+        total_cost_cents: Math.ceil(totalWithMarkup * 100),
+        currency: luluCostData.currency || "GBP",
+        breakdown: {
+          printCost,
+          shippingCost,
+          baseTotal,
+          totalWithMarkup,
+        },
+      };
     } catch (error) {
-      logger.error("Failed to calculate print cost:", error);
-      throw new Error(error);
+      logger.error("Error calculating order cost:", error.message);
+      return {
+        success: false,
+        message: "Error calculating order cost",
+        error: error.message,
+      };
     }
   }
 
-  /**
-   * Create print job (used after Stripe webhook)
-   */
-  async createPrintJob(printOrderData) {
+  async createPrintOrderAfterPayment(session) {
     try {
-      logger.info(`Creating print job for order ${printOrderData.external_id}`);
+      const { book_id, user_id, quantity, shipping_level } = session.metadata;
 
-      const requestData = {
-        external_id: printOrderData.external_id,
+      const book = await Book.findById(book_id);
+      if (!book) throw new Error("Book not found");
+
+      const pdfUrls = await printReadyPDFService.getFinalPDFUrls(book);
+      const user = await User.findById(user_id);
+
+      const shippingAddress = user?.shippingAddress;
+      if (!shippingAddress)
+        throw new Error("Missing shipping address for user");
+
+      const orderData = {
+        contact_email: user.email,
+        shipping_address: shippingAddress,
         line_items: [
           {
-            external_id: `${printOrderData.external_id}_item_1`,
-            title: printOrderData.title,
+            external_id: book._id.toString(),
+            title: book.title,
+            pod_package_id: luluService.podPackageId,
             printable_normalization: {
-              pod_package_id: this.podPackageId,
-              cover: { source_url: printOrderData.cover_pdf_url },
-              interior: { source_url: printOrderData.interior_pdf_url },
+              interior: { source_url: pdfUrls.interior },
+              cover: { source_url: pdfUrls.cover },
             },
-            quantity: printOrderData.quantity,
+            quantity: Number(quantity) || 1,
           },
         ],
-        shipping_address: printOrderData.shipping_address,
-        shipping_level: printOrderData.shipping_level,
-        contact_email: printOrderData.shipping_address.email,
       };
 
-      const result = await this.makeRequest("POST", "print-jobs/", requestData); // ✅ no leading slash
-
-      logger.info("Print job created successfully", {
-        printJobId: result.id,
-        externalId: printOrderData.external_id,
-        status: result.status?.name,
+      const luluOrder = await luluService.createPrintJob(orderData);
+      const printOrder = new PrintOrder({
+        book: book._id,
+        user: user._id,
+        luluJobId: luluOrder.id,
+        status: "submitted",
       });
+      await printOrder.save();
 
-      return result;
+      logger.info(`✅ Print order created for book ${book.title}`);
     } catch (error) {
-      logger.error("Failed to create print job:", error.message);
-      throw new Error("Failed to create print job");
+      logger.error("Error creating print order:", error.message);
+      throw error;
     }
   }
 }
 
-module.exports = new LuluService();
+module.exports = new PrintOrderService();
