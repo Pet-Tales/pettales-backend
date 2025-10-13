@@ -62,30 +62,137 @@ const handleCheckoutSessionCompleted = async (session) => {
         await printOrderService.processPrintPaymentSuccess(session);
         
         // Also process as book purchase for the download entitlement
-        await bookPurchaseService.processBookPurchase(session);
-      } catch (err) {
-        logger.error(`Error processing print order session: ${err.stack || err.message}`);
+        await bookPurchaseService.processPaymentSuccess(session);
+        
+        logger.info(
+          `Print order processed for session: ${session.id}`
+        );
+      } catch (e) {
+        logger.error(`Failed to process print order: ${e.message}`);
       }
+      return;
     }
-  } catch (err) {
-    logger.error(`Error handling checkout session completed: ${err.stack || err.message}`);
+    
+    // Handle book downloads (existing system)
+    if (sessionType === "book_download") {
+      try {
+        await bookPurchaseService.processPaymentSuccess(session);
+        logger.info(
+          `Book download purchase processed for session: ${session.id}`
+        );
+      } catch (e) {
+        logger.error(`Failed to process book purchase: ${e.message}`);
+      }
+      return;
+    }
+
+    // Handle PDF downloads from gallery (existing charity donation logic)
+    if (sessionType === "pdf_download") {
+      try {
+        // Process as book purchase first
+        await bookPurchaseService.processPaymentSuccess(session);
+        
+        // Then handle charity donation if present
+        if (session.metadata?.charity_id) {
+          const { CharityDonation } = require("../models");
+          const update = {
+            status: session.payment_status === "paid" ? "paid" : "failed",
+            stripe_payment_intent_id: session.payment_intent,
+            amount_cents: session.amount_total || 100,
+            currency: session.currency || "usd",
+          };
+          const base = {
+            book_id: session.metadata.book_id || session.metadata.bookId,
+            user_id: session.metadata.user_id?.startsWith("guest_") ? null : session.metadata.user_id,
+            guest_email: session.customer_details?.email || null,
+            charity_id: session.metadata.charity_id,
+            stripe_session_id: session.id,
+          };
+          await CharityDonation.findOneAndUpdate(
+            { stripe_session_id: session.id },
+            { $setOnInsert: base, $set: update },
+            { upsert: true, new: true }
+          );
+          logger.info(
+            `Charity donation recorded for session: ${session.id}`
+          );
+        }
+      } catch (e) {
+        logger.error(`Failed to process PDF download: ${e.message}`);
+      }
+      return;
+    }
+
+    // DEPRECATED: Credit purchases - log but ignore
+    if (sessionType === "credit_purchase") {
+      logger.warn(
+        `Received deprecated credit purchase webhook for session: ${session.id}. Ignoring - credit system removed.`
+      );
+      return;
+    }
+
+    logger.info(`Unhandled session type: ${sessionType} for session: ${session.id}`);
+  } catch (error) {
+    logger.error(`Error handling checkout session completed: ${error.message}`);
+    throw error;
   }
 };
 
 /**
- * Handle payment intent succeeded
+ * Handle successful payment intent
+ * @param {Object} paymentIntent - Stripe payment intent object
  */
 const handlePaymentIntentSucceeded = async (paymentIntent) => {
-  logger.info(`PaymentIntent succeeded: ${paymentIntent.id}`);
-  // Additional logic if needed
+  try {
+    // Check if this is a book-related purchase
+    const validTypes = ["book_download", "book_print", "pdf_download"];
+    if (!validTypes.includes(paymentIntent.metadata?.type)) {
+      logger.info(
+        `Ignoring non-book purchase payment intent: ${paymentIntent.id}`
+      );
+      return;
+    }
+
+    logger.info(
+      `Payment intent succeeded: ${paymentIntent.id} (type: ${paymentIntent.metadata?.type})`
+    );
+    // Additional processing if needed
+  } catch (error) {
+    logger.error(`Error handling payment intent succeeded: ${error.message}`);
+    throw error;
+  }
 };
 
 /**
- * Handle payment intent failed
+ * Handle failed payment intent
+ * @param {Object} paymentIntent - Stripe payment intent object
  */
 const handlePaymentIntentFailed = async (paymentIntent) => {
-  logger.warn(`PaymentIntent failed: ${paymentIntent.id}`);
-  // Additional logic if needed
+  try {
+    // Check if this is a book-related purchase
+    const validTypes = ["book_download", "book_print"];
+    if (!validTypes.includes(paymentIntent.metadata?.type)) {
+      logger.info(
+        `Ignoring non-book purchase payment intent: ${paymentIntent.id}`
+      );
+      return;
+    }
+
+    const userId = paymentIntent.metadata.user_id;
+    const bookId = paymentIntent.metadata.book_id;
+
+    logger.warn(
+      `Payment failed for book ${bookId}, user ${userId}, payment intent: ${paymentIntent.id}`
+    );
+
+    // Additional processing for failed payments if needed
+    // e.g., send notification email to user
+  } catch (error) {
+    logger.error(`Error handling payment intent failed: ${error.message}`);
+    throw error;
+  }
 };
 
-module.exports = { handleStripeWebhook };
+module.exports = {
+  handleStripeWebhook,
+};
