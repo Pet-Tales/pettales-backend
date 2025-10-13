@@ -104,7 +104,13 @@ class StripeService {
       lulu_shipping_cost: String(metadata.lulu_shipping_cost ?? ""),
       print_markup: String(metadata.print_markup ?? ""),
       shipping_markup: String(metadata.shipping_markup ?? ""),
+      shipping_level: String(metadata.shipping_level ?? ""),
+      shipping_country: String(metadata.shipping_country ?? ""),
+      shipping_city: String(metadata.shipping_city ?? ""),
+      shipping_state: String(metadata.shipping_state ?? ""),
+      shipping_postal_code: String(metadata.shipping_postal_code ?? ""),
     };
+
     const extraMeta = Object.fromEntries(
       Object.entries(metadata || {}).map(([k, v]) => [k, String(v ?? "")])
     );
@@ -129,24 +135,25 @@ class StripeService {
       }],
       success_url: `${WEB_URL}${returnUrl}?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${WEB_URL}${returnUrl}?payment=cancelled`,
-      
-      // REQUIRED for print orders so we can build PrintOrder.shipping_address
-shipping_address_collection: {
-  allowed_countries: ["US","CA","GB","IE","AU","NZ","FR","DE","ES","IT","NL","BE","SE","NO","DK"]
-},
-phone_number_collection: { enabled: true },   // we store phone_number on the order
-customer_update: { shipping: "auto" },        // optional but keeps shipping attached to customer
-      
+
+      // ✅ required so webhook has full shipping details
+      shipping_address_collection: {
+        allowed_countries: ["US","CA","GB","IE","AU","NZ","FR","DE","ES","IT","NL","BE","SE","NO","DK"]
+      },
+      phone_number_collection: { enabled: true },
+      customer_update: { shipping: "auto" },
+
       ...(safeEmail && { customer_email: safeEmail }),
       metadata: { ...baseMeta, ...extraMeta },
-      payment_intent_data: { metadata: { type: "book_print", book_id: safeBookId, user_id: safeUserId } },
+      payment_intent_data: {
+        metadata: { type: "book_print", book_id: safeBookId, user_id: safeUserId }
+      },
     });
 
-    logger.info(`Created print checkout session for user ${safeUserId}: ${session.id}`);
     return session;
   } catch (error) {
     logger.error(`Failed to create print checkout session: ${error.message}`);
-    throw new Error(`Print checkout session creation failed: ${error.message}`);
+    throw error;
   }
 }
 
