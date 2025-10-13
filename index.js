@@ -19,6 +19,9 @@ const {
 } = require("./utils/constants");
 
 const app = express();
+// Behind AWS ALB/ELB: trust X-Forwarded-* so req.ip and rate-limit work
+app.set("trust proxy", 1);
+app.disable("x-powered-by");
 
 // Validate environment variables
 validateRequiredEnvVars();
