@@ -129,6 +129,14 @@ class StripeService {
       }],
       success_url: `${WEB_URL}${returnUrl}?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${WEB_URL}${returnUrl}?payment=cancelled`,
+      
+      // REQUIRED for print orders so we can build PrintOrder.shipping_address
+shipping_address_collection: {
+  allowed_countries: ["US","CA","GB","IE","AU","NZ","FR","DE","ES","IT","NL","BE","SE","NO","DK"]
+},
+phone_number_collection: { enabled: true },   // we store phone_number on the order
+customer_update: { shipping: "auto" },        // optional but keeps shipping attached to customer
+      
       ...(safeEmail && { customer_email: safeEmail }),
       metadata: { ...baseMeta, ...extraMeta },
       payment_intent_data: { metadata: { type: "book_print", book_id: safeBookId, user_id: safeUserId } },
