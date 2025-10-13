@@ -651,12 +651,25 @@ async processPrintPaymentSuccess(stripeSession) {
     const externalId = `PTO_${timestamp}_${random}`;
 
     // Reconstruct shipping address from Stripe data
-    const stripeShipping = stripeSession.shipping_details || stripeSession.shipping;
+    // Stripe may return shipping under: collected_information.shipping_details, shipping_details, or shipping
+    const collectedShipping = stripeSession.collected_information?.shipping_details;
+    const directShipping = stripeSession.shipping_details || stripeSession.shipping;
+    const stripeShipping = collectedShipping || directShipping;
     const customerDetails = stripeSession.customer_details;
     
+    logger.info(`Extracting shipping data from Stripe session ${stripeSession.id}`, {
+      hasCollectedShipping: !!collectedShipping,
+      hasDirectShipping: !!directShipping,
+      shippingName: stripeShipping?.name,
+      addressLine1: stripeShipping?.address?.line1,
+      addressCity: stripeShipping?.address?.city,
+      addressCountry: stripeShipping?.address?.country,
+    });
+    
+    // Normalize Stripe fields to PrintOrder schema field names
     const shippingAddress = {
       name: stripeShipping?.name || customerDetails?.name || "Customer",
-      street1: stripeShipping?.address?.line1 || "",
+      street1: stripeShipping?.address?.line1 || metadata.shipping_city || "", // Fallback to metadata if missing
       street2: stripeShipping?.address?.line2 || "",
       city: stripeShipping?.address?.city || metadata.shipping_city || "",
       state_code: stripeShipping?.address?.state || metadata.shipping_state || "",
@@ -665,6 +678,28 @@ async processPrintPaymentSuccess(stripeSession) {
       phone_number: customerDetails?.phone || "N/A",
       email: customerDetails?.email || metadata.customer_email || ""
     };
+
+    // Log normalized address before validation
+    logger.info(`Normalized shipping address for order`, {
+      sessionId: stripeSession.id,
+      address: {
+        name: shippingAddress.name,
+        street1: shippingAddress.street1,
+        city: shippingAddress.city,
+        state_code: shippingAddress.state_code,
+        postcode: shippingAddress.postcode,
+        country_code: shippingAddress.country_code,
+      }
+    });
+
+    // Validate required fields before creating order
+    if (!shippingAddress.street1 || !shippingAddress.postcode) {
+      const missingFields = [];
+      if (!shippingAddress.street1) missingFields.push('street1');
+      if (!shippingAddress.postcode) missingFields.push('postcode');
+      
+      throw new Error(`Missing required shipping fields: ${missingFields.join(', ')}. Stripe session may not have collected shipping address.`);
+    }
 
     // Create print order record
     const printOrder = new PrintOrder({
