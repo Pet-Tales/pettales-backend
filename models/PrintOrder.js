@@ -25,111 +25,66 @@ const printOrderSchema = new mongoose.Schema(
     },
 
     // Order Details
-quantity: {
-  type: Number,
-  required: true,
-  min: 1,
-  max: 100, // Reasonable limit for print orders
-},
-total_cost_credits: {
-  type: Number,
-  required: true,
-  min: 0,
-},
-// ⬇️ REPLACE this old field
-// lulu_cost_usd: { type: Number, required: true, min: 0 },
+    quantity: {
+      type: Number,
+      required: true,
+      min: 1,
+      max: 100, // Reasonable limit for print orders
+    },
+    total_cost_credits: {
+      type: Number,
+      required: true,
+      min: 0,
+    },
 
-// ⬇️ WITH this
-lulu_cost_gbp: {
-  type: Number,
-  required: true,
-  min: 0,
-},
-total_cost_cents: {
-  type: Number,
-  required: true,
-  min: 0,
-},
-
-// ⬇️ Stripe tracking fields
-stripe_session_id: {
-  type: String,
-  unique: true,
-  sparse: true,
-  index: true,
-},
-stripe_payment_intent_id: {
-  type: String,
-  index: true,
-},
-
-// ⬇️ Lulu submission tracking
-lulu_submission_status: {
-  type: String,
-  enum: ['pending', 'submitting', 'submitted', 'failed', 'retry_needed'],
-  default: 'pending',
-},
-lulu_submission_attempts: {
-  type: Number,
-  default: 0,
-},
-lulu_submission_error: {
-  type: String,
-  default: null,
-},
-lulu_submitted_at: {
-  type: Date,
-  default: null,
-},
-
-markup_percentage: {
-  type: Number,
-  default: 20,
-  min: 0,
-  max: 100,
-},
+    // GBP + Stripe + Lulu tracking fields (replaces old USD field)
+    lulu_cost_gbp: {
+      type: Number,
+      required: true,
+      min: 0,
+    },
+    total_cost_cents: {
+      type: Number,
+      required: true,
+      min: 0,
+    },
 
     // Stripe tracking fields
     stripe_session_id: {
       type: String,
       unique: true,
       sparse: true,
-      index: true
+      index: true,
     },
     stripe_payment_intent_id: {
       type: String,
-      index: true
+      index: true,
     },
 
     // Lulu submission tracking
     lulu_submission_status: {
       type: String,
-      enum: ['pending', 'submitting', 'submitted', 'failed', 'retry_needed'],
-      default: 'pending'
+      enum: ["pending", "submitting", "submitted", "failed", "retry_needed"],
+      default: "pending",
     },
     lulu_submission_attempts: {
       type: Number,
-      default: 0
+      default: 0,
     },
     lulu_submission_error: {
       type: String,
-      default: null
+      default: null,
     },
     lulu_submitted_at: {
       type: Date,
-      default: null
+      default: null,
     },
 
-    // Currency update: GBP instead of USD
-    lulu_cost_gbp: {
+    markup_percentage: {
       type: Number,
-      required: true,
-      min: 0
-    },
-    total_cost_cents: {
-      type: Number,
-      required: true,
-      min: 0
+      default: 20,
+      min: 0,
+      max: 100,
     },
 
     // Shipping Information
@@ -288,9 +243,9 @@ printOrderSchema.virtual("formatted_order_id").get(function () {
   return this.external_id;
 });
 
-// Virtual for total cost in USD
+// Virtual for total cost in USD (still fine to keep as a computed value)
 printOrderSchema.virtual("total_cost_usd").get(function () {
-  return this.total_cost_credits * 0.01; // Convert credits to USD
+  return this.total_cost_credits * 0.01;
 });
 
 // Virtual for order age in days
