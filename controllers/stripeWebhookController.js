@@ -58,6 +58,15 @@ const handleCheckoutSessionCompleted = async (session) => {
     // Handle print orders (new)
     if (sessionType === "book_print") {
       try {
+        logger.info(`Processing print order webhook`, {
+          sessionId: session.id,
+          paymentStatus: session.payment_status,
+          amountTotal: session.amount_total,
+          currency: session.currency,
+          hasShippingDetails: !!session.shipping_details,
+          hasCollectedShipping: !!session.collected_information?.shipping_details,
+          customerEmail: session.customer_details?.email
+        });
         // Process print order creation
         await printOrderService.processPrintPaymentSuccess(session);
         
@@ -68,7 +77,11 @@ const handleCheckoutSessionCompleted = async (session) => {
           `Print order processed for session: ${session.id}`
         );
       } catch (e) {
-        logger.error(`Failed to process print order: ${e.message}`);
+        logger.error(`Failed to process print payment: ${e.message}`, {
+          sessionId: session.id,
+          error: e.stack,
+          metadata: session.metadata
+        });
       }
       return;
     }
