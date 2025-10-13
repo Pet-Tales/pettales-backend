@@ -23,6 +23,36 @@ const printOrderSchema = new mongoose.Schema(
       required: true,
       // This will be our internal order ID (e.g., "PTO_" + timestamp + random)
     },
+    // Stripe tracking fields
+    stripe_session_id: {
+      type: String,
+      unique: true,
+      sparse: true,
+      index: true
+    },
+    stripe_payment_intent_id: {
+      type: String,
+      index: true
+    },
+
+    // Lulu submission tracking
+    lulu_submission_status: {
+      type: String,
+      enum: ['pending', 'submitting', 'submitted', 'failed', 'retry_needed'],
+      default: 'pending'
+    },
+    lulu_submission_attempts: {
+      type: Number,
+      default: 0
+    },
+    lulu_submission_error: {
+      type: String,
+      default: null
+    },
+    lulu_submitted_at: {
+      type: Date,
+      default: null
+    },
 
     // Order Details
     quantity: {
