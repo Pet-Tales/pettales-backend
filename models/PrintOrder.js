@@ -36,11 +36,11 @@ const printOrderSchema = new mongoose.Schema(
       required: true,
       min: 0,
     },
-    lulu_cost_usd: {
-      type: Number,
-      required: true,
-      min: 0,
-    },
+    lulu_cost_gbp: {
+  type: Number,
+  required: true,
+  min: 0
+},
     markup_percentage: {
       type: Number,
       default: 20,
