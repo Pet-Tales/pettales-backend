@@ -37,10 +37,10 @@ const calculateCost = async (req, res) => {
     } = costData;
 
     res.status(200).json({
-  success: true,
-  message: "Cost calculated successfully",
-  data: publicCostData,
-});
+      success: true,
+      message: "Cost calculated successfully",
+      data: publicCostData,
+    });
   } catch (error) {
     logger.error("Failed to calculate print order cost:", error.message);
     res.status(400).json({
