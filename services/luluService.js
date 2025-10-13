@@ -17,12 +17,7 @@ class LuluService {
     };
 
     try {
-      const response = await axios({
-        method,
-        url,
-        headers,
-        data,
-      });
+      const response = await axios({ method, url, headers, data });
       return response.data;
     } catch (error) {
       logger.error("Lulu API request failed:", error.response?.data || error.message);
@@ -31,26 +26,16 @@ class LuluService {
   }
 
   /**
-   * Calculate print cost
+   * Calculate print job cost
    */
   async calculatePrintCost(pageCount, quantity, shippingAddress, shippingLevel) {
     try {
-      logger.info(
-        `Calculating print cost for ${quantity} books with ${pageCount} pages`
-      );
+      logger.info(`Calculating print cost for ${quantity} books with ${pageCount} pages`);
 
-      if (!pageCount || pageCount < 1) {
-        throw new Error(`Invalid page count: ${pageCount}`);
-      }
-      if (!quantity || quantity < 1) {
-        throw new Error(`Invalid quantity: ${quantity}`);
-      }
-      if (!this.podPackageId) {
-        throw new Error("POD package ID not configured");
-      }
-      if (!shippingAddress) {
-        throw new Error("Shipping address is required");
-      }
+      if (!pageCount || pageCount < 1) throw new Error(`Invalid page count: ${pageCount}`);
+      if (!quantity || quantity < 1) throw new Error(`Invalid quantity: ${quantity}`);
+      if (!this.podPackageId) throw new Error("POD package ID not configured");
+      if (!shippingAddress) throw new Error("Shipping address is required");
 
       const requestData = {
         line_items: [
@@ -85,6 +70,7 @@ class LuluService {
         currency: result.currency,
       });
 
+      // ⬅ returns full Lulu JSON (unchanged) so printOrderService reads correct keys
       return result;
     } catch (error) {
       logger.error("Failed to calculate print cost:", error);
@@ -93,7 +79,7 @@ class LuluService {
   }
 
   /**
-   * Create a print job
+   * Create a print job (used after Stripe webhook)
    */
   async createPrintJob(printOrderData) {
     try {
@@ -107,12 +93,8 @@ class LuluService {
             title: printOrderData.title,
             printable_normalization: {
               pod_package_id: this.podPackageId,
-              cover: {
-                source_url: printOrderData.cover_pdf_url,
-              },
-              interior: {
-                source_url: printOrderData.interior_pdf_url,
-              },
+              cover: { source_url: printOrderData.cover_pdf_url },
+              interior: { source_url: printOrderData.interior_pdf_url },
             },
             quantity: printOrderData.quantity,
           },
@@ -122,11 +104,7 @@ class LuluService {
         contact_email: printOrderData.shipping_address.email,
       };
 
-      const result = await this.makeRequest(
-        "POST",
-        "/print-jobs/",
-        requestData
-      );
+      const result = await this.makeRequest("POST", "/print-jobs/", requestData);
 
       logger.info("Print job created successfully", {
         printJobId: result.id,
