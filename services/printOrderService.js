@@ -837,6 +837,21 @@ async submitOrderToLulu(printOrderId, session = null) {
       status: luluPrintJob.status?.name
     });
 
+    // Log shipping address used in Lulu submission for verification
+    logger.info(`Lulu submission used shipping address`, {
+      orderId: printOrderId,
+      luluJobId: luluPrintJob.id,
+      shippingAddress: {
+        name: printOrder.shipping_address.name,
+        street1: printOrder.shipping_address.street1,
+        street2: printOrder.shipping_address.street2,
+        city: printOrder.shipping_address.city,
+        state_code: printOrder.shipping_address.state_code,
+        postcode: printOrder.shipping_address.postcode,
+        country_code: printOrder.shipping_address.country_code,
+      }
+    });
+
     return printOrder;
 
   } catch (error) {
