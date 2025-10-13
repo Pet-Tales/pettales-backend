@@ -25,67 +25,69 @@ const printOrderSchema = new mongoose.Schema(
     },
 
     // Order Details
-    quantity: {
-      type: Number,
-      required: true,
-      min: 1,
-      max: 100, // Reasonable limit for print orders
-    },
-        total_cost_credits: {
-      type: Number,
-      required: true,
-      min: 0,
-    },
+quantity: {
+  type: Number,
+  required: true,
+  min: 1,
+  max: 100, // Reasonable limit for print orders
+},
+total_cost_credits: {
+  type: Number,
+  required: true,
+  min: 0,
+},
+// ⬇️ REPLACE this old field
+// lulu_cost_usd: { type: Number, required: true, min: 0 },
 
-    // Replace USD field and add Stripe + Lulu tracking
-    lulu_cost_gbp: {
-      type: Number,
-      required: true,
-      min: 0
-    },
-    total_cost_cents: {
-      type: Number,
-      required: true,
-      min: 0
-    },
+// ⬇️ WITH this
+lulu_cost_gbp: {
+  type: Number,
+  required: true,
+  min: 0,
+},
+total_cost_cents: {
+  type: Number,
+  required: true,
+  min: 0,
+},
 
-    // Stripe tracking fields
-    stripe_session_id: {
-      type: String,
-      unique: true,
-      sparse: true,
-      index: true
-    },
-    stripe_payment_intent_id: {
-      type: String,
-      index: true
-    },
+// ⬇️ Stripe tracking fields
+stripe_session_id: {
+  type: String,
+  unique: true,
+  sparse: true,
+  index: true,
+},
+stripe_payment_intent_id: {
+  type: String,
+  index: true,
+},
 
-    // Lulu submission tracking
-    lulu_submission_status: {
-      type: String,
-      enum: ['pending', 'submitting', 'submitted', 'failed', 'retry_needed'],
-      default: 'pending'
-    },
-    lulu_submission_attempts: {
-      type: Number,
-      default: 0
-    },
-    lulu_submission_error: {
-      type: String,
-      default: null
-    },
-    lulu_submitted_at: {
-      type: Date,
-      default: null
-    },
+// ⬇️ Lulu submission tracking
+lulu_submission_status: {
+  type: String,
+  enum: ['pending', 'submitting', 'submitted', 'failed', 'retry_needed'],
+  default: 'pending',
+},
+lulu_submission_attempts: {
+  type: Number,
+  default: 0,
+},
+lulu_submission_error: {
+  type: String,
+  default: null,
+},
+lulu_submitted_at: {
+  type: Date,
+  default: null,
+},
 
-    markup_percentage: {
-      type: Number,
-      default: 20,
-      min: 0,
-      max: 100,
-    },
+markup_percentage: {
+  type: Number,
+  default: 20,
+  min: 0,
+  max: 100,
+},
 
     // Stripe tracking fields
     stripe_session_id: {
