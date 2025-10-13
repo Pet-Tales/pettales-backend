@@ -4,88 +4,117 @@ const luluService = require("./luluService");
 const stripeService = require("./stripeService");
 const printReadyPDFService = require("./printReadyPDFService");
 const logger = require("../utils/logger");
-const { PRINT_MARKUP_PERCENTAGE, SHIPPING_MARKUP_PERCENTAGE } = require("../utils/constants");
+const {
+  PRINT_MARKUP_PERCENTAGE,
+  SHIPPING_MARKUP_PERCENTAGE,
+} = require("../utils/constants");
 
 class PrintOrderService {
-  /**
-   * Calculate order cost including markup
-   */
   async calculateOrderCost(bookId, quantity, shippingAddress, shippingLevel) {
     try {
-      logger.info(`Calculating order cost for book ${bookId}, quantity: ${quantity}`);
+      logger.info(
+        `Calculating order cost for book ${bookId}, quantity: ${quantity}`
+      );
 
       const book = await Book.findById(bookId);
       if (!book) throw new Error("Book not found");
 
-      const availableShippingOptions = await luluService.getShippingOptions(
+      const pageCount = book.pageCount || 24;
+
+      const shippingOptions = await luluService.getShippingOptions(
         shippingAddress,
-        book.page_count,
+        pageCount,
         quantity
       );
 
-      const isShippingLevelAvailable = availableShippingOptions.some(
-        (option) => option.level === shippingLevel
+      const selectedOption = shippingOptions.find(
+        (opt) => opt.level === shippingLevel
       );
-      if (!isShippingLevelAvailable) {
-        const availableLevels = availableShippingOptions.map((o) => o.level);
-        throw new Error(
-          `Shipping level "${shippingLevel}" is not available. Options: ${availableLevels.join(", ")}`
-        );
-      }
+      if (!selectedOption) throw new Error("Invalid shipping level");
 
       const luluCostData = await luluService.calculatePrintCost(
-        book.page_count,
-        quantity,
         shippingAddress,
+        pageCount,
+        quantity,
         shippingLevel
       );
 
-      // ✅ These fields match Lulu’s real API (from your working version)
-      const luluPrintCost = parseFloat(
+      const printCost = Number(
         luluCostData.line_item_costs?.[0]?.total_cost_incl_tax || 0
       );
-      const luluShippingCost = parseFloat(
+      const shippingCost = Number(
         luluCostData.shipping_cost?.total_cost_incl_tax || 0
       );
-      const luluTotalCost = parseFloat(luluCostData.total_cost_incl_tax);
+      const baseTotal = printCost + shippingCost;
 
-      const printMarkupPercentage = PRINT_MARKUP_PERCENTAGE || 100;
-      const shippingMarkupPercentage = SHIPPING_MARKUP_PERCENTAGE || 5;
+      const totalWithMarkup =
+        baseTotal *
+        (1 + PRINT_MARKUP_PERCENTAGE / 100 + SHIPPING_MARKUP_PERCENTAGE / 100);
 
-      const printCostWithMarkup = luluPrintCost * (1 + printMarkupPercentage / 100);
-      const shippingCostWithMarkup =
-        luluShippingCost * (1 + shippingMarkupPercentage / 100);
-      const totalCostGBP = printCostWithMarkup + shippingCostWithMarkup;
-      const totalCostCents = Math.ceil(totalCostGBP * 100);
-
-      const costBreakdown = {
-        book_id: bookId,
-        book_title: book.title,
-        page_count: book.page_count,
-        quantity,
-        lulu_cost_gbp: luluTotalCost,
-        lulu_print_cost: luluPrintCost,
-        lulu_shipping_cost: luluShippingCost,
-        print_markup_percentage: printMarkupPercentage,
-        shipping_markup_percentage: shippingMarkupPercentage,
-        total_cost_gbp: totalCostGBP,
-        total_cost_cents: totalCostCents,
-        shipping_level: shippingLevel,
-        currency: luluCostData.currency,
-        cost_breakdown: {
-          line_items: luluCostData.line_item_costs,
-          shipping: luluCostData.shipping_cost,
-          fulfillment: luluCostData.fulfillment_cost,
-          fees: luluCostData.fees || [],
+      return {
+        total_cost_cents: Math.ceil(totalWithMarkup * 100),
+        currency: luluCostData.currency || "GBP",
+        breakdown: {
+          printCost,
+          shippingCost,
+          baseTotal,
+          totalWithMarkup,
         },
-        display_print_cost_gbp: printCostWithMarkup,
-        display_shipping_cost_gbp: shippingCostWithMarkup,
+      };
+    } catch (error) {
+      logger.error("Error calculating order cost:", error.message);
+      return {
+        success: false,
+        message: "Error calculating order cost",
+        error: error.message,
+      };
+    }
+  }
+
+  async createPrintOrderAfterPayment(session) {
+    try {
+      const { book_id, user_id, quantity, shipping_level } = session.metadata;
+
+      const book = await Book.findById(book_id);
+      if (!book) throw new Error("Book not found");
+
+      const pdfUrls = await printReadyPDFService.getFinalPDFUrls(book);
+      const user = await User.findById(user_id);
+
+      const shippingAddress = user?.shippingAddress;
+      if (!shippingAddress)
+        throw new Error("Missing shipping address for user");
+
+      const orderData = {
+        contact_email: user.email,
+        shipping_address: shippingAddress,
+        line_items: [
+          {
+            external_id: book._id.toString(),
+            title: book.title,
+            pod_package_id: luluService.podPackageId,
+            printable_normalization: {
+              interior: { source_url: pdfUrls.interior },
+              cover: { source_url: pdfUrls.cover },
+            },
+            quantity: Number(quantity) || 1,
+          },
+        ],
       };
 
-      return costBreakdown;
+      const luluOrder = await luluService.createPrintJob(orderData);
+      const printOrder = new PrintOrder({
+        book: book._id,
+        user: user._id,
+        luluJobId: luluOrder.id,
+        status: "submitted",
+      });
+      await printOrder.save();
+
+      logger.info(`✅ Print order created for book ${book.title}`);
     } catch (error) {
-      logger.error("Failed to calculate order cost:", error.message);
-      throw new Error("Error calculating order cost");
+      logger.error("Error creating print order:", error.message);
+      throw error;
     }
   }
 }
