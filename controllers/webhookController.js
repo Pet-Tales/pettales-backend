@@ -2,8 +2,8 @@ const crypto = require("crypto");
 const { validationResult } = require("express-validator");
 const logger = require("../utils/logger");
 const { emailService } = require("../services");
-const creditService = require("../services/creditService");
-const { Book, CreditTransaction } = require("../models");
+// credit system removed
+const { Book } = require("../models");
 const { WEBHOOK_SECRET } = require("../utils/constants");
 
 /**
@@ -105,25 +105,10 @@ const handleBookGeneration = async (req, res) => {
       });
     }
 
-    // Handle credit refunds for failed generations
-    if (status !== 200) {
-      try {
-        // Find the most recent usage transaction for this book
-        const usageTransaction = await CreditTransaction.findOne({
-          book_id: book._id,
-          type: "usage",
-          amount: { $lt: 0 }, // Negative amount indicates usage
-        }).sort({ created_at: -1 });
-
-        if (usageTransaction && usageTransaction.amount < 0) {
-          const refundAmount = Math.abs(usageTransaction.amount);
-
-          await creditService.refundCredits(
-            user._id.toString(),
-            refundAmount,
-            `Refund for failed book generation: "${book.title}"`,
-            { bookId: book._id }
-          );
+    // Credit system removed — skip refund for failed generations
+if (status !== 200) {
+  logger.info(`Skipping credit refund for book ${bookId} (credit system removed)`);
+}
 
           logger.info(
             `Refunded ${refundAmount} credits for failed book generation: ${bookId}`
