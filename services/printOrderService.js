@@ -586,6 +586,273 @@ class PrintOrderService {
       throw error;
     }
   }
+
+
+/**
+ * Process successful print payment from Stripe webhook
+ * This is called when Stripe confirms payment completion
+ */
+async processPrintPaymentSuccess(stripeSession) {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    const { metadata } = stripeSession;
+
+    // Validate this is a print order
+    if (metadata.order_type !== "print" && metadata.type !== "book_print") {
+      logger.info(`Session ${stripeSession.id} is not a print order, skipping`);
+      return null;
+    }
+
+    logger.info(`Processing print payment success for session ${stripeSession.id}`, {
+      bookId: metadata.book_id,
+      userId: metadata.user_id,
+      quantity: metadata.quantity
+    });
+
+    // Check for existing order (idempotency)
+    let existingOrder = await PrintOrder.findOne({
+      stripe_session_id: stripeSession.id,
+    }).session(session);
+
+    if (existingOrder) {
+      logger.info(`Print order already exists for session ${stripeSession.id}`, {
+        orderId: existingOrder._id,
+        status: existingOrder.status,
+        luluJobId: existingOrder.lulu_print_job_id
+      });
+      
+      // If order exists but Lulu submission failed, retry
+      if (existingOrder.lulu_submission_status === 'failed' && 
+          existingOrder.lulu_submission_attempts < 3) {
+        logger.info(`Retrying Lulu submission for order ${existingOrder._id}`);
+        await this.submitOrderToLulu(existingOrder._id, session);
+      }
+      
+      await session.commitTransaction();
+      return existingOrder;
+    }
+
+    // Parse metadata
+    const bookId = metadata.book_id;
+    const userId = metadata.user_id;
+    const quantity = parseInt(metadata.quantity);
+
+    // Validate book exists
+    const book = await Book.findById(bookId).session(session);
+    if (!book) {
+      throw new Error(`Book not found: ${bookId}`);
+    }
+
+    // Generate external ID
+    const timestamp = Date.now();
+    const random = Math.random().toString(36).substring(2, 8).toUpperCase();
+    const externalId = `PTO_${timestamp}_${random}`;
+
+    // Reconstruct shipping address from Stripe data
+    const stripeShipping = stripeSession.shipping_details || stripeSession.shipping;
+    const customerDetails = stripeSession.customer_details;
+    
+    const shippingAddress = {
+      name: stripeShipping?.name || customerDetails?.name || "Customer",
+      street1: stripeShipping?.address?.line1 || "",
+      street2: stripeShipping?.address?.line2 || "",
+      city: stripeShipping?.address?.city || metadata.shipping_city || "",
+      state_code: stripeShipping?.address?.state || metadata.shipping_state || "",
+      postcode: stripeShipping?.address?.postal_code || metadata.shipping_postal_code || "",
+      country_code: stripeShipping?.address?.country || metadata.shipping_country || "US",
+      phone_number: customerDetails?.phone || "N/A",
+      email: customerDetails?.email || metadata.customer_email || ""
+    };
+
+    // Create print order record
+    const printOrder = new PrintOrder({
+      user_id: userId,
+      book_id: bookId,
+      external_id: externalId,
+      quantity: quantity,
+      total_cost_cents: stripeSession.amount_total,
+      lulu_cost_gbp: parseFloat(metadata.lulu_print_cost) + parseFloat(metadata.lulu_shipping_cost),
+      markup_percentage: parseInt(metadata.print_markup || metadata.print_markup_percentage || 100),
+      shipping_address: shippingAddress,
+      shipping_level: metadata.shipping_level,
+      stripe_session_id: stripeSession.id,
+      stripe_payment_intent_id: stripeSession.payment_intent,
+      status: "created",
+      lulu_submission_status: "pending",
+      ordered_at: new Date()
+    });
+
+    await printOrder.save({ session });
+
+    logger.info(`Print order created from Stripe webhook`, {
+      orderId: printOrder._id,
+      externalId: printOrder.external_id,
+      stripeSessionId: stripeSession.id
+    });
+
+    // Submit to Lulu
+    await this.submitOrderToLulu(printOrder._id, session);
+
+    await session.commitTransaction();
+
+    return await PrintOrder.findById(printOrder._id)
+      .populate("book_id", "title")
+      .populate("user_id", "email");
+
+  } catch (error) {
+    await session.abortTransaction();
+    logger.error(`Failed to process print payment: ${error.message}`, {
+      sessionId: stripeSession.id,
+      error: error.stack
+    });
+    
+    // Don't throw - we don't want to fail the webhook
+    // Mark order as needing retry if it exists
+    try {
+      await PrintOrder.findOneAndUpdate(
+        { stripe_session_id: stripeSession.id },
+        { 
+          lulu_submission_status: 'retry_needed',
+          lulu_submission_error: error.message
+        }
+      );
+    } catch (updateError) {
+      logger.error(`Failed to mark order for retry: ${updateError.message}`);
+    }
+    
+    return null;
+  } finally {
+    session.endSession();
+  }
+}
+
+/**
+ * Submit order to Lulu (separate method for retries)
+ */
+async submitOrderToLulu(printOrderId, session = null) {
+  const useSession = session || (await mongoose.startSession());
+  if (!session) useSession.startTransaction();
+
+  try {
+    const printOrder = await PrintOrder.findById(printOrderId)
+      .populate('book_id')
+      .session(useSession);
+
+    if (!printOrder) {
+      throw new Error(`Print order not found: ${printOrderId}`);
+    }
+
+    // Check if already submitted
+    if (printOrder.lulu_print_job_id) {
+      logger.info(`Order ${printOrderId} already submitted to Lulu`, {
+        luluJobId: printOrder.lulu_print_job_id
+      });
+      return printOrder;
+    }
+
+    // Update submission status
+    printOrder.lulu_submission_status = 'submitting';
+    printOrder.lulu_submission_attempts += 1;
+    await printOrder.save({ session: useSession });
+
+    logger.info(`Submitting order ${printOrderId} to Lulu (attempt ${printOrder.lulu_submission_attempts})`);
+
+    // Generate PDFs if not already present
+    if (!printOrder.cover_pdf_url || !printOrder.interior_pdf_url) {
+      const pdfUrls = await this.generatePrintReadyPDFs(
+        printOrder.book_id._id,
+        printOrder.user_id,
+        printOrderId
+      );
+      
+      printOrder.cover_pdf_url = pdfUrls.coverPdfUrl;
+      printOrder.interior_pdf_url = pdfUrls.interiorPdfUrl;
+      await printOrder.save({ session: useSession });
+    }
+
+    // Submit to Lulu API
+    const luluPrintJob = await luluService.createPrintJob({
+      external_id: printOrder.external_id,
+      title: printOrder.book_id.title,
+      quantity: printOrder.quantity,
+      shipping_address: printOrder.shipping_address,
+      shipping_level: printOrder.shipping_level,
+      cover_pdf_url: printOrder.cover_pdf_url,
+      interior_pdf_url: printOrder.interior_pdf_url,
+    });
+
+    // Update order with Lulu response
+    printOrder.lulu_print_job_id = luluPrintJob.id;
+    printOrder.status = luluPrintJob.status?.name?.toLowerCase() || "unpaid";
+    printOrder.lulu_submission_status = 'submitted';
+    printOrder.lulu_submitted_at = new Date();
+    printOrder.lulu_submission_error = null;
+    
+    await printOrder.save({ session: useSession });
+
+    if (!session) {
+      await useSession.commitTransaction();
+    }
+
+    logger.info(`Successfully submitted order to Lulu`, {
+      orderId: printOrderId,
+      luluJobId: luluPrintJob.id,
+      status: luluPrintJob.status?.name
+    });
+
+    return printOrder;
+
+  } catch (error) {
+    if (!session) {
+      await useSession.abortTransaction();
+    }
+    
+    // Update order with error
+    await PrintOrder.findByIdAndUpdate(printOrderId, {
+      lulu_submission_status: 'failed',
+      lulu_submission_error: error.message
+    });
+    
+    logger.error(`Failed to submit order to Lulu: ${error.message}`, {
+      orderId: printOrderId,
+      error: error.stack
+    });
+    
+    throw error;
+  } finally {
+    if (!session) {
+      useSession.endSession();
+    }
+  }
+}
+
+/**
+ * Retry failed Lulu submissions (can be called by a scheduled job)
+ */
+async retryFailedLuluSubmissions() {
+  try {
+    const failedOrders = await PrintOrder.find({
+      lulu_submission_status: { $in: ['failed', 'retry_needed'] },
+      lulu_submission_attempts: { $lt: 3 },
+      created_at: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) } // Last 24 hours
+    }).limit(10);
+
+    logger.info(`Found ${failedOrders.length} orders to retry Lulu submission`);
+
+    for (const order of failedOrders) {
+      try {
+        await this.submitOrderToLulu(order._id);
+        logger.info(`Successfully retried Lulu submission for order ${order._id}`);
+      } catch (error) {
+        logger.error(`Failed to retry Lulu submission for order ${order._id}: ${error.message}`);
+      }
+    }
+  } catch (error) {
+    logger.error(`Failed to retry Lulu submissions: ${error.message}`);
+  }
+}
 }
 
 module.exports = new PrintOrderService();
