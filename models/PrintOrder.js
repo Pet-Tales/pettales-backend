@@ -66,11 +66,6 @@ const printOrderSchema = new mongoose.Schema(
       required: true,
       min: 0
     },
-    total_cost_credits: {
-      type: Number,
-      required: true,
-      min: 0,
-    },
     lulu_cost_gbp: {
   type: Number,
   required: true,
