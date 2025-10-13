@@ -1,53 +1,331 @@
-const Stripe = require("stripe");
+const stripe = require("stripe");
+const { 
+  STRIPE_SECRET_KEY, 
+  WEB_URL,
+  STRIPE_PRICE_DOWNLOAD_12,
+  STRIPE_PRICE_DOWNLOAD_16,
+  STRIPE_PRICE_DOWNLOAD_24,
+} = require("../utils/constants");
 const logger = require("../utils/logger");
-const { STRIPE_SECRET_KEY } = require("../utils/constants");
 
-const stripe = new Stripe(STRIPE_SECRET_KEY);
+// Initialize Stripe
+const stripeClient = stripe(STRIPE_SECRET_KEY);
 
 class StripeService {
-  /**
-   * Create a payment intent
+ /**
+   * Get the price ID for a download based on page count
    */
-  async createPaymentIntent(amount, currency = "GBP", metadata = {}) {
+  getDownloadPriceId(pageCount) {
+    const priceMap = {
+      12: STRIPE_PRICE_DOWNLOAD_12,
+      16: STRIPE_PRICE_DOWNLOAD_16,
+      24: STRIPE_PRICE_DOWNLOAD_24,
+    };
+    return priceMap[pageCount] || STRIPE_PRICE_DOWNLOAD_12;
+  }
+
+  /**
+   * Create a Stripe checkout session for book downloads (using product IDs)
+   * @param {string} bookId - Book ID
+   * @param {number} pageCount - Number of pages (12, 16, or 24)
+   * @param {string} userId - User ID
+   * @param {string} userEmail - User email for prefilling
+   * @param {Object} metadata - Additional metadata
+   * @returns {Promise<Object>} - Stripe checkout session
+   */
+  async createDownloadCheckoutSession(bookId, pageCount, userId, userEmail, metadata = {}) {
+  try {
+    // --- SAFETY COERCIONS ---
+    const safeBookId    = bookId != null ? String(bookId) : "";
+    const safePageCount = Number.isFinite(Number(pageCount)) ? Number(pageCount) : 12;
+    const safeUserId    = userId != null ? String(userId) : `guest_${Date.now()}`;
+    const safeEmail     = (userEmail && String(userEmail).trim()) || undefined;
+
+    // Stripe metadata MUST be strings
+    const baseMeta = {
+      type: "book_download",
+      book_id: safeBookId,
+      user_id: safeUserId,
+      page_count: String(safePageCount),
+    };
+    const extraMeta = Object.fromEntries(
+      Object.entries(metadata || {}).map(([k, v]) => [k, String(v ?? "")])
+    );
+
+    const priceId = this.getDownloadPriceId(safePageCount);
+    const returnUrl = metadata.returnUrl || `/books/${safeBookId}`;
+
+    logger.info(`Creating download checkout session for book ${safeBookId}, ${safePageCount} pages`);
+
+    const session = await stripeClient.checkout.sessions.create({
+      mode: "payment",
+      payment_method_types: ["card"],
+      line_items: [{ price: priceId, quantity: 1 }],
+      success_url: `${WEB_URL}${returnUrl}?payment=success&download=pdf&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${WEB_URL}${returnUrl}?payment=cancelled`,
+      ...(safeEmail && { customer_email: safeEmail }),
+      metadata: { ...baseMeta, ...extraMeta },
+      payment_intent_data: { metadata: { ...baseMeta } },
+    });
+
+    logger.info(`Created download checkout session for user ${safeUserId}: ${session.id}`);
+    return session;
+  } catch (error) {
+    logger.error(`Failed to create download checkout session: ${error.message}`);
+    throw new Error(`Download checkout session creation failed: ${error.message}`);
+  }
+}
+
+  /**
+   * Create a Stripe checkout session for print orders (dynamic pricing)
+   * @param {string} bookId - Book ID
+   * @param {number} totalCents - Total price in cents (Lulu cost + markup)
+   * @param {string} userId - User ID
+   * @param {string} userEmail - User email
+   * @param {Object} metadata - Additional metadata (should include shipping info)
+   * @returns {Promise<Object>} - Stripe checkout session
+   */
+  async createPrintCheckoutSession(bookId, totalCents, userId, userEmail, metadata = {}) {
+  try {
+    const safeBookId    = bookId != null ? String(bookId) : "";
+    const safeUserId    = userId != null ? String(userId) : `guest_${Date.now()}`;
+    const safeEmail     = (userEmail && String(userEmail).trim()) || undefined;
+    const safeAmount    = Number.isFinite(Number(totalCents)) ? Number(totalCents) : 0;
+
+    const pageCountRaw  = metadata.page_count ?? metadata.pageCount ?? 12;
+    const safePageCount = Number.isFinite(Number(pageCountRaw)) ? Number(pageCountRaw) : 12;
+
+    const baseMeta = {
+      type: "book_print",
+      book_id: safeBookId,
+      user_id: safeUserId,
+      page_count: String(safePageCount),
+      lulu_print_cost: String(metadata.lulu_print_cost ?? ""),
+      lulu_shipping_cost: String(metadata.lulu_shipping_cost ?? ""),
+      print_markup: String(metadata.print_markup ?? ""),
+      shipping_markup: String(metadata.shipping_markup ?? ""),
+    };
+    const extraMeta = Object.fromEntries(
+      Object.entries(metadata || {}).map(([k, v]) => [k, String(v ?? "")])
+    );
+
+    const returnUrl = metadata.returnUrl || `/books/${safeBookId}`;
+
+    logger.info(`Creating print checkout session: £${(safeAmount / 100).toFixed(2)} for book ${safeBookId}`);
+
+    const session = await stripeClient.checkout.sessions.create({
+      mode: "payment",
+      payment_method_types: ["card"],
+      line_items: [{
+        price_data: {
+          currency: "gbp",
+          product_data: {
+            name: `Print & Ship - ${safePageCount} Page Book`,
+            description: `Professional printed book shipped to ${metadata.shipping_country || "your address"}. Includes digital download.`,
+          },
+          unit_amount: safeAmount,
+        },
+        quantity: 1,
+      }],
+      success_url: `${WEB_URL}${returnUrl}?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${WEB_URL}${returnUrl}?payment=cancelled`,
+      ...(safeEmail && { customer_email: safeEmail }),
+      metadata: { ...baseMeta, ...extraMeta },
+      payment_intent_data: { metadata: { type: "book_print", book_id: safeBookId, user_id: safeUserId } },
+    });
+
+    logger.info(`Created print checkout session for user ${safeUserId}: ${session.id}`);
+    return session;
+  } catch (error) {
+    logger.error(`Failed to create print checkout session: ${error.message}`);
+    throw new Error(`Print checkout session creation failed: ${error.message}`);
+  }
+}
+
+  /**
+   * Create a generic checkout session (for backwards compatibility and special cases)
+   * @param {string} userId - User ID
+   * @param {number} priceInCents - Price in cents
+   * @param {string} userEmail - User email for prefilling
+   * @param {string} context - Purchase context
+   * @param {Object} metadata - Additional metadata
+   * @returns {Promise<Object>} - Stripe checkout session
+   */
+  async createCheckoutSession(userId, priceInCents, userEmail, context = "book-download", metadata = {}) {
     try {
-      const paymentIntent = await stripe.paymentIntents.create({
-        amount,
-        currency,
-        metadata,
+      // Route to specific methods based on context
+      if (context === "book-download") {
+        const pageCount = metadata.page_count || 12;
+        const bookId = metadata.bookId || metadata.book_id;
+        return this.createDownloadCheckoutSession(bookId, pageCount, userId, userEmail, metadata);
+      } else if (context === "book-print") {
+        const bookId = metadata.bookId || metadata.book_id;
+        return this.createPrintCheckoutSession(bookId, priceInCents, userId, userEmail, metadata);
+      }
+
+      // Fallback for other contexts (charity donations, etc.)
+      logger.info(
+        `Creating generic checkout session: $${(priceInCents / 100).toFixed(2)} for context: ${context}`
+      );
+
+      const bookId = metadata.bookId || metadata.book_id;
+      const returnUrl = metadata.returnUrl || `/books/${bookId}`;
+      
+      const session = await stripeClient.checkout.sessions.create({
+        payment_method_types: ["card"],
+        line_items: [
+          {
+            price_data: {
+              currency: "gbp",
+              product_data: {
+                name: metadata.productName || "PetTalesAI Purchase",
+                description: metadata.productDescription || "Purchase from PetTalesAI",
+              },
+              unit_amount: priceInCents,
+            },
+            quantity: 1,
+          },
+        ],
+        mode: "payment",
+        success_url: `${WEB_URL}${returnUrl}?payment=success&session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${WEB_URL}${returnUrl}?payment=cancelled`,
+        ...(userEmail && { customer_email: userEmail }),
+        metadata: {
+          user_id: userId,
+          type: context,
+          ...metadata,
+        },
+        payment_intent_data: {
+          metadata: {
+            user_id: userId,
+            type: context,
+            ...metadata,
+          },
+        },
       });
 
-      logger.info(`PaymentIntent created: ${paymentIntent.id}`);
-      return paymentIntent;
+      logger.info(
+        `Created generic checkout session for user ${userId}: ${session.id}`
+      );
+      return session;
     } catch (error) {
-      logger.error("Error creating payment intent", error);
-      throw new Error("Error creating payment intent");
+      logger.error(
+        `Failed to create checkout session: ${error.message}`
+      );
+      throw new Error(`Checkout session creation failed: ${error.message}`);
     }
   }
 
   /**
-   * Retrieve a payment intent by ID
+   * Retrieve a checkout session
+   * @param {string} sessionId - Stripe session ID
+   * @returns {Promise<Object>} - Stripe session object
+   */
+  async retrieveSession(sessionId) {
+    try {
+      const session = await stripeClient.checkout.sessions.retrieve(sessionId);
+      return session;
+    } catch (error) {
+      logger.error(
+        `Failed to retrieve Stripe session ${sessionId}: ${error.message}`
+      );
+      throw new Error(`Session retrieval failed: ${error.message}`);
+    }
+  }
+
+  /**
+   * Retrieve a payment intent
+   * @param {string} paymentIntentId - Stripe payment intent ID
+   * @returns {Promise<Object>} - Stripe payment intent object
    */
   async retrievePaymentIntent(paymentIntentId) {
     try {
-      const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+      const paymentIntent = await stripeClient.paymentIntents.retrieve(
+        paymentIntentId
+      );
       return paymentIntent;
     } catch (error) {
-      logger.error(`Error retrieving payment intent ${paymentIntentId}`, error);
-      throw new Error("Error retrieving payment intent");
+      logger.error(
+        `Failed to retrieve payment intent ${paymentIntentId}: ${error.message}`
+      );
+      throw new Error(`Payment intent retrieval failed: ${error.message}`);
     }
   }
 
   /**
-   * Capture a payment intent
+   * Create a customer in Stripe
+   * @param {string} email - Customer email
+   * @param {string} name - Customer name
+   * @returns {Promise<Object>} - Stripe customer object
    */
-  async capturePaymentIntent(paymentIntentId) {
+  async createCustomer(email, name) {
     try {
-      const paymentIntent = await stripe.paymentIntents.capture(paymentIntentId);
-      logger.info(`PaymentIntent captured: ${paymentIntent.id}`);
-      return paymentIntent;
+      const customer = await stripeClient.customers.create({
+        email,
+        name,
+      });
+      return customer;
     } catch (error) {
-      logger.error(`Error capturing payment intent ${paymentIntentId}`, error);
-      throw new Error("Error capturing payment intent");
+      logger.error(`Failed to create Stripe customer: ${error.message}`);
+      throw new Error(`Customer creation failed: ${error.message}`);
+    }
+  }
+
+  /**
+   * Retrieve a checkout session by ID (alias for retrieveSession)
+   * @param {string} sessionId - Stripe session ID
+   * @returns {Promise<Object>} - Stripe session object
+   */
+  async getCheckoutSession(sessionId) {
+    try {
+      const session = await stripeClient.checkout.sessions.retrieve(sessionId);
+      return session;
+    } catch (error) {
+      logger.error(`Failed to retrieve checkout session: ${error.message}`);
+      throw new Error("Session retrieval failed: " + error.message);
+    }
+  }
+
+  /**
+   * Check if a checkout session was completed successfully for a book
+   * @param {string} sessionId - Stripe session ID
+   * @param {string} bookId - Book ID to verify
+   * @returns {Promise<boolean>} - True if session was completed for this book
+   */
+  async isSessionCompletedForBook(sessionId, bookId) {
+    try {
+      const session = await this.getCheckoutSession(sessionId);
+
+      return (
+        session.payment_status === "paid" &&
+        (session.metadata?.type === "book_download" ||
+          session.metadata?.type === "book_print" ||
+          session.metadata?.type === "pdf_download") &&
+        session.metadata?.book_id === bookId
+      );
+    } catch (error) {
+      logger.error(`Failed to verify session for book: ${error.message}`);
+      return false;
+    }
+  }
+
+  /**
+   * Construct webhook event from request
+   * @param {string} payload - Raw request body
+   * @param {string} signature - Stripe signature header
+   * @returns {Object} - Stripe event object
+   */
+  constructWebhookEvent(payload, signature) {
+    try {
+      const event = stripeClient.webhooks.constructEvent(
+        payload,
+        signature,
+        process.env.STRIPE_WEBHOOK_SECRET
+      );
+      return event;
+    } catch (error) {
+      logger.error(`Webhook signature verification failed: ${error.message}`);
+      throw new Error(`Webhook verification failed: ${error.message}`);
     }
   }
 }
