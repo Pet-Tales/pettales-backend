@@ -1,7 +1,9 @@
 const express = require("express");
 const { body } = require("express-validator");
 const { webhookController } = require("../controllers");
-const { handleStripeWebhook } = require("../controllers/stripeWebhookController");
+const {
+  handleStripeWebhook,
+} = require("../controllers/stripeWebhookController");
 const { webhookRateLimit } = require("../middleware");
 const luluWebhookRoutes = require("./luluWebhook");
 
@@ -28,13 +30,18 @@ const bookGenerationValidation = [
 // Book generation webhook endpoint
 router.post(
   "/book-generation",
-  webhookRateLimit,
+  webhookRateLimit, // Apply rate limiting
   bookGenerationValidation,
   webhookController.handleBookGeneration
 );
 
-// ✅ Stripe webhook endpoint — no route-level express.raw here
-router.post("/stripe", webhookRateLimit, handleStripeWebhook);
+// Stripe webhook endpoint (raw body needed for signature verification)
+router.post(
+  "/stripe",
+  express.raw({ type: "application/json" }),
+  webhookRateLimit,
+  handleStripeWebhook
+);
 
 // Lulu webhook endpoints
 router.use("/lulu", luluWebhookRoutes);
