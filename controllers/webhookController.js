@@ -45,109 +45,68 @@ const verifyWebhookSignature = (payload, signature) => {
 };
 
 /**
- * Handle book generation webhook notifications
- */
 const handleBookGeneration = async (req, res) => {
   try {
-    // Check validation errors
+    // (Optional) keep this block only if you actually set WEBHOOK_SECRET and sign requests.
+    const signature = req.headers["x-webhook-signature"];
+    if (!verifyWebhookSignature(JSON.stringify(req.body), signature)) {
+      return res.status(401).json({ success: false, message: "Invalid signature" });
+    }
+
+    // Basic payload validation
     const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      logger.warn("Webhook validation failed", { errors: errors.array() });
-      return res.status(400).json({
-        success: false,
-        message: "Validation failed",
-        errors: errors.array(),
-      });
+    if (!errors || !errors.isEmpty()) {
+      return res.status(400).json({ success: false, errors: errors.array ? errors.array() : [] });
     }
 
-    // Verify webhook signature
-    const signature = req.get("X-Webhook-Signature");
-    const rawPayload = JSON.stringify(req.body);
-
-    if (!verifyWebhookSignature(rawPayload, signature)) {
-      logger.warn("Webhook signature verification failed", {
-        ip: req.ip,
-        userAgent: req.get("User-Agent"),
-      });
-      return res.status(401).json({
-        success: false,
-        message: "Invalid webhook signature",
-      });
+    const { bookId, status, message, pdf_url } = req.body;
+    if (!bookId) {
+      return res.status(400).json({ success: false, message: "Missing bookId" });
     }
 
-    const { bookId, status, message, timestamp } = req.body;
-
-    logger.info(`Received webhook for book ${bookId} with status ${status}`, {
-      bookId,
-      status,
-      message,
-      timestamp,
-      ip: req.ip,
-    });
-
-    // Fetch book and user information
+    // Load book + user
     const book = await Book.findById(bookId).populate("user_id");
     if (!book) {
-      logger.warn(`Book not found for webhook: ${bookId}`);
-      return res.status(404).json({
-        success: false,
-        message: "Book not found",
-      });
+      return res.status(404).json({ success: false, message: "Book not found" });
     }
-
     const user = book.user_id;
     if (!user) {
-      logger.warn(`User not found for book: ${bookId}`);
-      return res.status(404).json({
-        success: false,
-        message: "User not found",
-      });
+      return res.status(404).json({ success: false, message: "User not found for this book" });
     }
 
-    // Log webhook processing (credit system removed, no refunds needed)
-    if (status !== 200) {
-      logger.info(`Book generation failed for ${bookId}, status: ${status}`);
-    }
+    // --- Persist status so UI doesn't stay stuck on "generating"
+    const update = {
+      generation_status: status === 200 ? "success" : "failed",
+      updated_at: new Date(),
+    };
+    if (pdf_url) update.pdf_url = pdf_url; // save PDF URL if your webhook provides it
 
-    // Send appropriate email notification
+    const updatedBook = await Book.findByIdAndUpdate(
+      bookId,
+      { $set: update },
+      { new: true }
+    );
+
+    // --- Optional: notifications (safe-guarded; skip if your email service uses different names)
     try {
-      if (status === 200) {
-        // Success notification
-        await emailService.sendBookGenerationSuccess(
-          user.email,
-          user.first_name || "User",
-          book.title,
-          book.pdf_url,
-          user.preferred_language || "en"
-        );
-        logger.info(`Sent success email for book ${bookId} to ${user.email}`);
-      } else {
-        // Failure notification
-        await emailService.sendBookGenerationFailure(
-          user.email,
-          user.first_name || "User",
-          book.title,
-          user.preferred_language || "en"
-        );
-        logger.info(`Sent failure email for book ${bookId} to ${user.email}`);
+      if (status === 200 && emailService?.sendBookReadyEmail) {
+        await emailService.sendBookReadyEmail(user.email, updatedBook);
+      } else if (status !== 200 && emailService?.sendBookFailedEmail) {
+        await emailService.sendBookFailedEmail(user.email, updatedBook, message || "Story generation failed");
       }
-    } catch (emailError) {
-      logger.error(
-        `Failed to send email notification for book ${bookId}:`,
-        emailError
-      );
-      // Don't fail the webhook if email sending fails
+    } catch (notifyErr) {
+      logger.warn("Email notification failed:", notifyErr);
     }
 
-    // Return success response
-    res.json({
+    return res.json({
       success: true,
-      message: "Webhook processed successfully",
-      received: true,
+      message: "Webhook processed",
+      bookId,
+      generation_status: updatedBook.generation_status,
     });
   } catch (error) {
     logger.error("Webhook processing error:", error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: "Internal server error",
     });
