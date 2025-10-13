@@ -31,21 +31,31 @@ const printOrderSchema = new mongoose.Schema(
       min: 1,
       max: 100, // Reasonable limit for print orders
     },
+
+    // Legacy (no longer required, retained for backwards compatibility)
     total_cost_credits: {
       type: Number,
-      required: true,
+      required: false,
+      default: undefined,
       min: 0,
     },
     lulu_cost_usd: {
       type: Number,
+      required: false,
+      default: undefined,
+      min: 0,
+    },
+
+    // Current pricing fields
+    lulu_cost_gbp: {
+      type: Number,
       required: true,
       min: 0,
     },
-    markup_percentage: {
+    total_cost_cents: {
       type: Number,
-      default: 20,
+      required: true,
       min: 0,
-      max: 100,
     },
 
     // Shipping Information
@@ -83,7 +93,8 @@ const printOrderSchema = new mongoose.Schema(
       country_code: {
         type: String,
         required: true,
-        length: 2,
+        minlength: 2,
+        maxlength: 2,
         uppercase: true,
       },
       phone_number: {
@@ -178,49 +189,35 @@ const printOrderSchema = new mongoose.Schema(
       default: null,
     },
 
-    // --- Added: Stripe tracking fields
+    // Stripe tracking fields
     stripe_session_id: {
       type: String,
       unique: true,
-      sparse: true,
-      index: true
+      sparse: true, // unique already creates the index
     },
     stripe_payment_intent_id: {
       type: String,
-      index: true
     },
 
-    // --- Added: Lulu submission tracking
+    // Lulu submission tracking
     lulu_submission_status: {
       type: String,
-      enum: ['pending', 'submitting', 'submitted', 'failed', 'retry_needed'],
-      default: 'pending'
+      enum: ["pending", "submitting", "submitted", "failed", "retry_needed"],
+      default: "pending",
     },
     lulu_submission_attempts: {
       type: Number,
-      default: 0
+      default: 0,
     },
     lulu_submission_error: {
       type: String,
-      default: null
+      default: null,
     },
     lulu_submitted_at: {
       type: Date,
-      default: null
+      default: null,
     },
-
-    // --- Added: GBP cost fields and Stripe cents tracking
-    lulu_cost_gbp: {
-      type: Number,
-      required: true,
-      min: 0
-    },
-    total_cost_cents: {
-      type: Number,
-      required: true,
-      min: 0
-    },
-},
+  },
   {
     timestamps: { createdAt: "created_at", updatedAt: "updated_at" },
   }
@@ -230,7 +227,7 @@ const printOrderSchema = new mongoose.Schema(
 printOrderSchema.index({ user_id: 1, created_at: -1 });
 printOrderSchema.index({ status: 1 });
 printOrderSchema.index({ book_id: 1 });
-// Note: lulu_print_job_id and external_id indexes are created automatically by unique: true
+// Note: lulu_print_job_id, external_id, stripe_session_id unique indexes are created by the schema definitions
 
 // Pre-save middleware to generate external_id if not provided
 printOrderSchema.pre("save", function (next) {
@@ -247,9 +244,9 @@ printOrderSchema.virtual("formatted_order_id").get(function () {
   return this.external_id;
 });
 
-// Virtual for total cost in USD
+// Virtual for total cost in USD (legacy conversion if present)
 printOrderSchema.virtual("total_cost_usd").get(function () {
-  return this.total_cost_credits * 0.01; // Convert credits to USD
+  return (this.total_cost_credits || 0) * 0.01; // Convert credits to USD
 });
 
 // Virtual for order age in days
