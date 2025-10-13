@@ -1,47 +1,53 @@
 const Stripe = require("stripe");
 const logger = require("../utils/logger");
 const { STRIPE_SECRET_KEY } = require("../utils/constants");
-const printOrderService = require("./printOrderService");
 
 const stripe = new Stripe(STRIPE_SECRET_KEY);
 
 class StripeService {
-  async createCheckoutSession(bookId, user, quantity, shippingAddress, shippingLevel) {
+  /**
+   * Create a payment intent
+   */
+  async createPaymentIntent(amount, currency = "GBP", metadata = {}) {
     try {
-      const cost = await printOrderService.calculateOrderCost(
-        bookId,
-        quantity,
-        shippingAddress,
-        shippingLevel
-      );
-
-      const session = await stripe.checkout.sessions.create({
-        payment_method_types: ["card"],
-        line_items: [
-          {
-            price_data: {
-              currency: cost.currency,
-              product_data: { name: "Pet Tales Printed Book" },
-              unit_amount: cost.total_cost_cents,
-            },
-            quantity: 1,
-          },
-        ],
-        mode: "payment",
-        success_url: `${process.env.WEB_URL}/success`,
-        cancel_url: `${process.env.WEB_URL}/cancel`,
-        metadata: {
-          book_id: bookId,
-          user_id: user._id.toString(),
-          quantity,
-          shipping_level: shippingLevel,
-        },
+      const paymentIntent = await stripe.paymentIntents.create({
+        amount,
+        currency,
+        metadata,
       });
 
-      return session;
+      logger.info(`PaymentIntent created: ${paymentIntent.id}`);
+      return paymentIntent;
     } catch (error) {
-      logger.error("Error creating Stripe checkout session:", error.message);
-      throw new Error("Failed to create Stripe session");
+      logger.error("Error creating payment intent", error);
+      throw new Error("Error creating payment intent");
+    }
+  }
+
+  /**
+   * Retrieve a payment intent by ID
+   */
+  async retrievePaymentIntent(paymentIntentId) {
+    try {
+      const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+      return paymentIntent;
+    } catch (error) {
+      logger.error(`Error retrieving payment intent ${paymentIntentId}`, error);
+      throw new Error("Error retrieving payment intent");
+    }
+  }
+
+  /**
+   * Capture a payment intent
+   */
+  async capturePaymentIntent(paymentIntentId) {
+    try {
+      const paymentIntent = await stripe.paymentIntents.capture(paymentIntentId);
+      logger.info(`PaymentIntent captured: ${paymentIntent.id}`);
+      return paymentIntent;
+    } catch (error) {
+      logger.error(`Error capturing payment intent ${paymentIntentId}`, error);
+      throw new Error("Error capturing payment intent");
     }
   }
 }
