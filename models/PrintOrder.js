@@ -177,7 +177,50 @@ const printOrderSchema = new mongoose.Schema(
       ref: "CreditTransaction",
       default: null,
     },
-  },
+
+    // --- Added: Stripe tracking fields
+    stripe_session_id: {
+      type: String,
+      unique: true,
+      sparse: true,
+      index: true
+    },
+    stripe_payment_intent_id: {
+      type: String,
+      index: true
+    },
+
+    // --- Added: Lulu submission tracking
+    lulu_submission_status: {
+      type: String,
+      enum: ['pending', 'submitting', 'submitted', 'failed', 'retry_needed'],
+      default: 'pending'
+    },
+    lulu_submission_attempts: {
+      type: Number,
+      default: 0
+    },
+    lulu_submission_error: {
+      type: String,
+      default: null
+    },
+    lulu_submitted_at: {
+      type: Date,
+      default: null
+    },
+
+    // --- Added: GBP cost fields and Stripe cents tracking
+    lulu_cost_gbp: {
+      type: Number,
+      required: true,
+      min: 0
+    },
+    total_cost_cents: {
+      type: Number,
+      required: true,
+      min: 0
+    },
+},
   {
     timestamps: { createdAt: "created_at", updatedAt: "updated_at" },
   }
