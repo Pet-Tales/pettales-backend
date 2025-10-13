@@ -18,69 +18,39 @@ const {
   checkOptionalEnvVars,
 } = require("./utils/constants");
 
-const { handleStripeWebhook } = require("./controllers/stripeWebhookController");
-
+// Validate environment variables
 validateRequiredEnvVars();
 checkOptionalEnvVars();
 
-// Initialize app
+// Connect to MongoDB
+connectDB();
+
+// Initialize Express
 const app = express();
 
-// ✅ Stripe webhook must be defined before body parsers, but as a *route*, not middleware
-app.post(
-  "/api/webhook/stripe",
-  express.raw({ type: "application/json" }),
-  handleStripeWebhook
-);
-
-// ✅ Correct middleware order (important for authentication)
-app.use(cors({ origin: WEB_URL, credentials: true }));
-app.use(cookieParser());
+// Middleware
+app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use(cookieParser());
+app.use(morgan(DEBUG_MODE ? "dev" : "combined"));
 app.use(passport.initialize());
-if (DEBUG_MODE) app.use(morgan("dev"));
-
-// ✅ Restore user authentication middleware (was missing)
-app.use(authenticateUser);
-
-// Connect database
-connectDB();
 
 // Routes
 app.use("/api", routes);
 
-// Health endpoint
+// Health check
 app.get("/health", (req, res) => {
-  res.status(200).json({ status: "ok", timestamp: new Date().toISOString() });
+  res.status(200).send("OK");
 });
 
-// Global error handler
-app.use((err, req, res, next) => {
-  logger.error("Unhandled error", err);
-  res.status(500).json({ error: err.message });
+// Start webhook lifecycle service
+webhookLifecycleService.start();
+
+// Cleanup old sessions periodically
+sessionCleanup.start();
+
+// Start server
+app.listen(PORT, () => {
+  logger.info(`Server running at ${WEB_URL}:${PORT}`);
 });
-
-const port = PORT || 5000;
-app.listen(port, () => {
-  logger.info(`Server running on port ${port}`);
-
-  // 🩹 Safely start background services without crashing if missing
-  if (sessionCleanup) {
-    if (typeof sessionCleanup === "function") {
-      sessionCleanup();
-    } else if (typeof sessionCleanup.start === "function") {
-      sessionCleanup.start();
-    } else {
-      logger.warn("Session cleanup service not started (no valid export found)");
-    }
-  }
-
-  if (webhookLifecycleService && typeof webhookLifecycleService.start === "function") {
-    webhookLifecycleService.start();
-  } else {
-    logger.warn("Webhook lifecycle service not started (no valid export found)");
-  }
-});
-
-module.exports = app;
