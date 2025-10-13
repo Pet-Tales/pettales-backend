@@ -617,10 +617,12 @@ async processPrintPaymentSuccess(stripeSession) {
     }).session(session);
 
     if (existingOrder) {
-      logger.info(`Print order already exists for session ${stripeSession.id}`, {
+      logger.info(`[IDEMPOTENCY] Print order already exists for session ${stripeSession.id}`, {
         orderId: existingOrder._id,
         status: existingOrder.status,
-        luluJobId: existingOrder.lulu_print_job_id
+        luluJobId: existingOrder.lulu_print_job_id,
+        luluSubmissionStatus: existingOrder.lulu_submission_status,
+        attempts: existingOrder.lulu_submission_attempts
       });
       
       // If order exists but Lulu submission failed, retry
