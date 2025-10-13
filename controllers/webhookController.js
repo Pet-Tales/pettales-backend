@@ -2,7 +2,8 @@ const crypto = require("crypto");
 const { validationResult } = require("express-validator");
 const logger = require("../utils/logger");
 const { emailService } = require("../services");
-const { Book } = require("../models");
+const creditService = require("../services/creditService");
+const { Book, CreditTransaction } = require("../models");
 const { WEBHOOK_SECRET } = require("../utils/constants");
 
 /**
@@ -45,68 +46,141 @@ const verifyWebhookSignature = (payload, signature) => {
 };
 
 /**
+ * Handle book generation webhook notifications
+ */
 const handleBookGeneration = async (req, res) => {
   try {
-    // (Optional) keep this block only if you actually set WEBHOOK_SECRET and sign requests.
-    const signature = req.headers["x-webhook-signature"];
-    if (!verifyWebhookSignature(JSON.stringify(req.body), signature)) {
-      return res.status(401).json({ success: false, message: "Invalid signature" });
-    }
-
-    // Basic payload validation
+    // Check validation errors
     const errors = validationResult(req);
-    if (!errors || !errors.isEmpty()) {
-      return res.status(400).json({ success: false, errors: errors.array ? errors.array() : [] });
+    if (!errors.isEmpty()) {
+      logger.warn("Webhook validation failed", { errors: errors.array() });
+      return res.status(400).json({
+        success: false,
+        message: "Validation failed",
+        errors: errors.array(),
+      });
     }
 
-    const { bookId, status, message, pdf_url } = req.body;
-    if (!bookId) {
-      return res.status(400).json({ success: false, message: "Missing bookId" });
+    // Verify webhook signature
+    const signature = req.get("X-Webhook-Signature");
+    const rawPayload = JSON.stringify(req.body);
+
+    if (!verifyWebhookSignature(rawPayload, signature)) {
+      logger.warn("Webhook signature verification failed", {
+        ip: req.ip,
+        userAgent: req.get("User-Agent"),
+      });
+      return res.status(401).json({
+        success: false,
+        message: "Invalid webhook signature",
+      });
     }
 
-    // Load book + user
+    const { bookId, status, message, timestamp } = req.body;
+
+    logger.info(`Received webhook for book ${bookId} with status ${status}`, {
+      bookId,
+      status,
+      message,
+      timestamp,
+      ip: req.ip,
+    });
+
+    // Fetch book and user information
     const book = await Book.findById(bookId).populate("user_id");
     if (!book) {
-      return res.status(404).json({ success: false, message: "Book not found" });
+      logger.warn(`Book not found for webhook: ${bookId}`);
+      return res.status(404).json({
+        success: false,
+        message: "Book not found",
+      });
     }
+
     const user = book.user_id;
     if (!user) {
-      return res.status(404).json({ success: false, message: "User not found for this book" });
+      logger.warn(`User not found for book: ${bookId}`);
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
     }
 
-    // --- Persist status so UI doesn't stay stuck on "generating"
-    const update = {
-      generation_status: status === 200 ? "success" : "failed",
-      updated_at: new Date(),
-    };
-    if (pdf_url) update.pdf_url = pdf_url; // save PDF URL if your webhook provides it
+    // Handle credit refunds for failed generations
+    if (status !== 200) {
+      try {
+        // Find the most recent usage transaction for this book
+        const usageTransaction = await CreditTransaction.findOne({
+          book_id: book._id,
+          type: "usage",
+          amount: { $lt: 0 }, // Negative amount indicates usage
+        }).sort({ created_at: -1 });
 
-    const updatedBook = await Book.findByIdAndUpdate(
-      bookId,
-      { $set: update },
-      { new: true }
-    );
+        if (usageTransaction && usageTransaction.amount < 0) {
+          const refundAmount = Math.abs(usageTransaction.amount);
 
-    // --- Optional: notifications (safe-guarded; skip if your email service uses different names)
-    try {
-      if (status === 200 && emailService?.sendBookReadyEmail) {
-        await emailService.sendBookReadyEmail(user.email, updatedBook);
-      } else if (status !== 200 && emailService?.sendBookFailedEmail) {
-        await emailService.sendBookFailedEmail(user.email, updatedBook, message || "Story generation failed");
+          await creditService.refundCredits(
+            user._id.toString(),
+            refundAmount,
+            `Refund for failed book generation: "${book.title}"`,
+            { bookId: book._id }
+          );
+
+          logger.info(
+            `Refunded ${refundAmount} credits for failed book generation: ${bookId}`
+          );
+        } else {
+          logger.info(
+            `No usage transaction found for book ${bookId}, skipping refund`
+          );
+        }
+      } catch (refundError) {
+        logger.error(
+          `Failed to refund credits for book ${bookId}:`,
+          refundError
+        );
+        // Don't fail the webhook if credit refund fails
       }
-    } catch (notifyErr) {
-      logger.warn("Email notification failed:", notifyErr);
     }
 
-    return res.json({
+    // Send appropriate email notification
+    try {
+      if (status === 200) {
+        // Success notification
+        await emailService.sendBookGenerationSuccess(
+          user.email,
+          user.first_name || "User",
+          book.title,
+          book.pdf_url,
+          user.preferred_language || "en"
+        );
+        logger.info(`Sent success email for book ${bookId} to ${user.email}`);
+      } else {
+        // Failure notification
+        await emailService.sendBookGenerationFailure(
+          user.email,
+          user.first_name || "User",
+          book.title,
+          user.preferred_language || "en"
+        );
+        logger.info(`Sent failure email for book ${bookId} to ${user.email}`);
+      }
+    } catch (emailError) {
+      logger.error(
+        `Failed to send email notification for book ${bookId}:`,
+        emailError
+      );
+      // Don't fail the webhook if email sending fails
+    }
+
+    // Return success response
+    res.json({
       success: true,
-      message: "Webhook processed",
-      bookId,
-      generation_status: updatedBook.generation_status,
+      message: "Webhook processed successfully",
+      received: true,
     });
   } catch (error) {
     logger.error("Webhook processing error:", error);
-    return res.status(500).json({
+    res.status(500).json({
       success: false,
       message: "Internal server error",
     });
