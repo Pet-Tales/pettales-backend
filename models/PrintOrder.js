@@ -217,6 +217,8 @@ const printOrderSchema = new mongoose.Schema(
 printOrderSchema.index({ user_id: 1, created_at: -1 });
 printOrderSchema.index({ status: 1 });
 printOrderSchema.index({ book_id: 1 });
+printOrderSchema.index({ stripe_session_id: 1 });
+printOrderSchema.index({ lulu_submission_status: 1, lulu_submission_attempts: 1 });
 // Note: lulu_print_job_id and external_id indexes are created automatically by unique: true
 
 // Pre-save middleware to generate external_id if not provided
