@@ -236,11 +236,6 @@ printOrderSchema.virtual("formatted_order_id").get(function () {
   return this.external_id;
 });
 
-// Virtual for total cost in USD
-printOrderSchema.virtual("total_cost_usd").get(function () {
-  return this.total_cost_credits * 0.01; // Convert credits to USD
-});
-
 // Virtual for order age in days
 printOrderSchema.virtual("order_age_days").get(function () {
   if (!this.created_at) return 0;
