@@ -9,8 +9,11 @@ class LuluService {
     this.podPackageId = LULU_POD_PACKAGE_ID;
   }
 
+  /**
+   * Generic Lulu API request
+   */
   async makeRequest(method, endpoint, data = null) {
-    const url = new URL(endpoint, this.baseUrl).toString(); // ✅ fixes "Invalid URL"
+    const url = `${this.baseUrl}${endpoint}`; // ✅ reverted to simple concatenation
     const headers = {
       Authorization: `Bearer ${this.apiKey}`,
       "Content-Type": "application/json",
@@ -25,6 +28,9 @@ class LuluService {
     }
   }
 
+  /**
+   * Calculate print cost (used by printOrderService)
+   */
   async calculatePrintCost(pageCount, quantity, shippingAddress, shippingLevel) {
     try {
       logger.info(`Calculating print cost for ${quantity} books with ${pageCount} pages`);
@@ -58,7 +64,7 @@ class LuluService {
 
       const result = await this.makeRequest(
         "POST",
-        "/print-job-cost-calculations/",
+        "print-job-cost-calculations/", // ✅ no leading slash
         requestData
       );
 
@@ -67,13 +73,17 @@ class LuluService {
         currency: result.currency,
       });
 
-      return result; // returns full Lulu JSON (unchanged)
+      // ✅ returns full Lulu JSON unchanged (used by printOrderService)
+      return result;
     } catch (error) {
       logger.error("Failed to calculate print cost:", error);
       throw new Error(error);
     }
   }
 
+  /**
+   * Create print job (used after Stripe webhook)
+   */
   async createPrintJob(printOrderData) {
     try {
       logger.info(`Creating print job for order ${printOrderData.external_id}`);
@@ -97,7 +107,7 @@ class LuluService {
         contact_email: printOrderData.shipping_address.email,
       };
 
-      const result = await this.makeRequest("POST", "/print-jobs/", requestData);
+      const result = await this.makeRequest("POST", "print-jobs/", requestData); // ✅ no leading slash
 
       logger.info("Print job created successfully", {
         printJobId: result.id,
