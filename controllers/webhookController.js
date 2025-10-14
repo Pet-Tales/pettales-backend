@@ -131,3 +131,16 @@ const handleBookGeneration = async (req, res) => {
       message: "Webhook processed successfully",
       received: true,
     });
+  } catch (error) {
+    logger.error("Webhook processing error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
+  }
+};
+
+module.exports = {
+  handleBookGeneration,
+};
+
