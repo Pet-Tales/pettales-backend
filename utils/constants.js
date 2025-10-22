@@ -88,7 +88,7 @@ const ILLUST_VECTOR_ART =
   "https://storage.pettales.ai/_static/illustration_styles/illust_vector_art_9.jpg";
 
 const ILLUST_CLASSIC_WATERCOLOR =
-  "https://storage.pettales.ai/_static/illustration_styles/illust_classic_watercolor_1.jpg";
+  "https://storage.pettales.ai/_static/illustration_styles/illust_classic_watercolor_1.png";
 
 
 // Application Constants
