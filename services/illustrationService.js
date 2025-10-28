@@ -283,7 +283,9 @@ class IllustrationService {
 
       // Fallback to generic prompt if no stored prompt exists (for older books)
       if (!prompt) {
-        prompt = `A beautiful children's book front cover illustration featuring the characters from the story "${book.title}". ${book.description}. Art style: ${book.illustration_style}. Colorful, engaging, and suitable for children.`;
+        const styleDescription = mapStyleToDescription(book.illustration_style);
+        prompt = `A beautiful children's book front cover illustration featuring the characters from the story "${book.title}". ${book.description}. Art style: ${styleDescription}. Colorful, engaging, and suitable for children.`;
+        prompt = sanitizeStyleTerms(prompt);
         logger.warn(
           `No stored front cover prompt found for book ${bookId}, using fallback prompt`
         );
