@@ -526,22 +526,23 @@ if (!prompt) {
       }
 
       // Use the existing illustration prompt from the page
-      const prompt = page.illustration_prompt;
+const prompt = page.illustration_prompt;
+const safePrompt = sanitizeStyleTerms(prompt);
 
-      // Generate new illustration using book's original seed + current alternatives length
-      let seed;
-      if (book.generation_seed) {
-        // Use original seed + current alternatives length for consistency
-        seed = this.generateRegenerationSeed(
-          book.generation_seed,
-          page.alternative_illustrations.length
-        );
-      } else {
-        // Backward compatibility: generate random seed for books without stored seed
-        seed = this.generateRandomSeed();
-        // Store the generated seed for future regenerations
-        await Book.findByIdAndUpdate(book._id, { generation_seed: seed });
-      }
+// Generate new illustration using book's original seed + current alternatives length
+let seed;
+if (book.generation_seed) {
+  // Use original seed + current alternatives length for consistency
+  seed = this.generateRegenerationSeed(
+    book.generation_seed,
+    page.alternative_illustrations.length
+  );
+} else {
+  // Backward compatibility: generate random seed for books without stored seed
+  seed = this.generateRandomSeed();
+  // Store the generated seed for future regenerations
+  await Book.findByIdAndUpdate(book._id, { generation_seed: seed });
+}
 
       const tempFileName = `page_regen_${pageId}_${Date.now()}.jpg`;
       const tempDir = getTempDir();
