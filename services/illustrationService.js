@@ -12,6 +12,28 @@ const {
   ILLUST_CLASSIC_WATERCOLOR,
 } = require("../utils/constants");
 
+// Map internal style keys to safe, descriptive text (no brand words)
+function mapStyleToDescription(styleKey) {
+  switch (styleKey) {
+    case "disney":
+      return "3D animated storybook style with expressive characters, soft lighting, and cinematic depth";
+    case "anime":
+      return "anime style with bold colours and dynamic poses";
+    case "vector_art":
+      return "clean vector illustration style with bright flat colours";
+    case "classic_watercolor":
+      return "traditional watercolor storybook style with soft brush textures";
+    default:
+      return "children's storybook illustration style";
+  }
+}
+
+// Safety net: if any prompt text still contains the word "disney", replace it.
+function sanitizeStyleTerms(text) {
+  if (!text) return text;
+  return text.replace(/disney/gi, "3D animated storybook style with expressive characters, soft lighting, and cinematic depth");
+}
+
 /**
  * Get the appropriate temp directory based on the operating system
  * @returns {string} - Temp directory path
