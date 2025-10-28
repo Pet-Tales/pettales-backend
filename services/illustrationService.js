@@ -400,16 +400,16 @@ class IllustrationService {
       let prompt = book.back_cover_prompt;
 
       // Fallback to generic prompt if no stored prompt exists (for older books)
-      if (!prompt) {
-        prompt = `A beautiful children's book back cover illustration. ${
-          book.moral_of_back_cover || book.moral
-        }. Art style: ${
-          book.illustration_style
-        }. Colorful, engaging, and suitable for children.`;
-        logger.warn(
-          `No stored back cover prompt found for book ${bookId}, using fallback prompt`
-        );
-      }
+if (!prompt) {
+  const styleDescriptionBack = mapStyleToDescription(book.illustration_style);
+  prompt = `A beautiful children's book back cover illustration. ${
+    book.moral_of_back_cover || book.moral
+  }. Art style: ${styleDescriptionBack}. Colorful, engaging, and suitable for children.`;
+  prompt = sanitizeStyleTerms(prompt);
+  logger.warn(
+    `No stored back cover prompt found for book ${bookId}, using fallback prompt`
+  );
+}
 
       // Generate new illustration using book's original seed + current alternatives length
       let seed;
