@@ -330,6 +330,16 @@ class PrintOrderService {
    */
   async processPrintPaymentSuccess(stripeSession) {
     try {
+      async processPrintPaymentSuccess(stripeSession) {
+    try {
+      logger.info("🔔 Stripe webhook: processPrintPaymentSuccess START", {
+        stripeSessionId: stripeSession.id,
+        paymentStatus: stripeSession.payment_status,
+        amountTotal: stripeSession.amount_total,
+        currency: stripeSession.currency,
+        metadata: stripeSession.metadata,
+      });
+
       const { metadata } = stripeSession;
 
       if (metadata.order_type !== "print" && metadata.type !== "book_print") {
