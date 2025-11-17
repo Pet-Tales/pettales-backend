@@ -346,8 +346,6 @@ class PrintOrderService {
   /**
    * Process successful print payment from Stripe webhook
    */
-  async processPrintPaymentSuccess(stripeSession) {
-    try {
       async processPrintPaymentSuccess(stripeSession) {
     try {
       logger.info("🔔 Stripe webhook: processPrintPaymentSuccess START", {
