@@ -377,7 +377,15 @@ class PrintOrderService {
           print_markup_percentage: parseInt(metadata.print_markup),
         },
       };
-
+logger.info("🔧 Stripe webhook: about to call createPrintOrder", {
+        stripeSessionId: stripeSession.id,
+        userId: metadata.user_id,
+        bookId: orderData.bookId,
+        quantity: orderData.quantity,
+        shippingCountry: orderData.shippingAddress.country_code,
+        shippingPostcode: orderData.shippingAddress.postal_code,
+        shippingLevel: orderData.shippingLevel,
+      });
       // Create the print order
       const result = await this.createPrintOrder(
         metadata.user_id,
