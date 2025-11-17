@@ -386,9 +386,15 @@ class LuluService {
 
       return result;
     } catch (error) {
-      logger.error("Failed to create print job:", error.message);
-      throw new Error("Failed to create print job");
-    }
+  logger.error("Failed to create print job:", {
+    message: error.message,
+    response: error.response?.data,
+    status: error.response?.status,
+    headers: error.response?.headers,
+    stack: error.stack,
+  });
+  throw error; 
+}
   }
 
   /**
