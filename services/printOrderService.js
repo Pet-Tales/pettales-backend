@@ -284,6 +284,19 @@ class PrintOrderService {
 
       await printOrder.save({ session });
 
+      logger.info("📤 Submitting print order to Lulu", {
+        printOrderId: printOrder._id,
+        externalId: printOrder.external_id,
+        stripeSessionId,
+        userId,
+        bookId,
+        quantity,
+        shippingCountry: shippingAddress.country_code,
+        shippingPostcode: shippingAddress.postal_code,
+        shippingLevel,
+        hasCoverPdf: !!pdfUrls.coverPdfUrl,
+        hasInteriorPdf: !!pdfUrls.interiorPdfUrl,
+      });
       // Submit to Lulu API
       const luluPrintJob = await luluService.createPrintJob({
         external_id: printOrder.external_id,
@@ -317,8 +330,13 @@ class PrintOrderService {
         costData,
       };
     } catch (error) {
-      await session.abortTransaction();
-      logger.error("Failed to create print order:", error.message);
+      logger.error("❌ Failed to create print order", {
+        message: error.message,
+        stack: error.stack,
+        userId,
+        orderData,
+        stripeSessionId,
+      });
       throw new Error(`Failed to create print order: ${error.message}`);
     } finally {
       session.endSession();
